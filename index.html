@@ -328,6 +328,14 @@ tr:hover td{background:rgba(255,255,255,0.015)}
       <button class="btn btn-ghost btn-sm" onclick="scanCustomPath()">Skanerlash</button>
       <button class="btn btn-ghost btn-sm" onclick="showRawDebug()">Debug</button>
     </div>
+    <!-- Domain key ogohlantirish -->
+    <div id="eimzo-domain-warn" style="display:none;margin-bottom:12px;padding:12px 15px;background:var(--red-d);border:1px solid rgba(240,64,64,.25);border-radius:6px;font-size:12px;line-height:1.7;color:#f87171">
+      <strong>⚠ E-IMZO Domain API Key kerak!</strong><br>
+      <code style="background:rgba(0,0,0,.3);padding:1px 5px;border-radius:3px;font-size:11px">manzursulaymonov.github.io</code> domeni uchun E-IMZO dan alohida API key olish kerak.<br><br>
+      <strong>2 ta yechim:</strong><br>
+      1. <strong>Tezkor yechim:</strong> Faylni lokal kompyuterda oching (<code>file://</code> yoki <code>localhost</code>) — ular uchun standart key mavjud.<br>
+      2. <strong>Doimiy yechim:</strong> <a href="https://e-imzo.uz" target="_blank" style="color:var(--amber)">e-imzo.uz</a> → Bog'lanish → domeningizni ro'yxatdan o'tkazing → API key oling → Sozlamalar ga kiriting.
+    </div>
     <!-- Tanlangan kalit -->
     <div id="sel-cert-box" style="display:none;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--amber-d);border:1px solid var(--amber-b);border-radius:6px">
@@ -658,6 +666,21 @@ tr:hover td{background:rgba(255,255,255,0.015)}
   </div>
 
   <div class="drawer-section">
+    <h3>E-IMZO Domain API Key</h3>
+    <div style="padding:10px 14px;background:var(--amber-d);border:1px solid var(--amber-b);border-radius:6px;font-size:11px;line-height:1.7;color:#fcd47b;margin-bottom:14px">
+      <strong>github.io yoki boshqa domendan ishlatmoqchi bo'lsangiz</strong> — e-imzo.uz dan shu domen uchun API key oling. localhost/127.0.0.1 uchun key kiritish shart emas.
+    </div>
+    <div class="fg">
+      <label>Domen (masalan: manzursulaymonov.github.io)</label>
+      <input type="text" id="s-eimzo-domain" placeholder="manzursulaymonov.github.io">
+    </div>
+    <div class="fg">
+      <label>E-IMZO API Key (shu domen uchun)</label>
+      <input type="text" id="s-eimzo-key" placeholder="96D0C149...">
+    </div>
+  </div>
+
+  <div class="drawer-section">
     <h3>CORS Proxy (ixtiyoriy)</h3>
     <div class="info-box ib-amber" style="font-size:11px">
       Agar DIDOX API yoki Drive CORS xatolik bersa proxy URL kiriting.<br>
@@ -697,12 +720,14 @@ const SKEY = 'didox-bridge-v1';
 function gs() {
   const d = JSON.parse(localStorage.getItem(SKEY) || '{}');
   return {
-    url:   d.url   || 'https://devapi.goodsign.biz/',
-    api:   d.api   || '',
-    user:  d.user  || '',
-    gas:   d.gas   || '',
-    proxy: d.proxy || '',
-    shId:  d.shId  || '',
+    url:         d.url         || 'https://devapi.goodsign.biz/',
+    api:         d.api         || '',
+    user:        d.user        || '',
+    gas:         d.gas         || '',
+    proxy:       d.proxy       || '',
+    shId:        d.shId        || '',
+    eimzoDomain: d.eimzoDomain || '',
+    eimzoKey:    d.eimzoKey    || '',
   };
 }
 
@@ -715,16 +740,22 @@ function loadSettingsUI() {
   document.getElementById('s-proxy').value = s.proxy;
   const shEl = document.getElementById('sh-id');
   if (shEl && s.shId) shEl.value = s.shId;
+  const ed = document.getElementById('s-eimzo-domain');
+  if (ed) ed.value = s.eimzoDomain || '';
+  const ek = document.getElementById('s-eimzo-key');
+  if (ek) ek.value = s.eimzoKey || '';
 }
 
 function saveSettings() {
   const d = {
-    url:   document.getElementById('s-url').value.trim(),
-    api:   document.getElementById('s-api').value.trim(),
-    user:  document.getElementById('s-user').value.trim(),
-    gas:   document.getElementById('s-gas').value.trim(),
-    proxy: document.getElementById('s-proxy').value.trim(),
-    shId:  (document.getElementById('sh-id') || {}).value || '',
+    url:         document.getElementById('s-url').value.trim(),
+    api:         document.getElementById('s-api').value.trim(),
+    user:        document.getElementById('s-user').value.trim(),
+    gas:         document.getElementById('s-gas').value.trim(),
+    proxy:       document.getElementById('s-proxy').value.trim(),
+    shId:        (document.getElementById('sh-id') || {}).value || '',
+    eimzoDomain: (document.getElementById('s-eimzo-domain') || {}).value || '',
+    eimzoKey:    (document.getElementById('s-eimzo-key') || {}).value || '',
   };
   localStorage.setItem(SKEY, JSON.stringify(d));
   log('auth', '✓ Sozlamalar saqlandi', 's');
@@ -784,216 +815,265 @@ function pb(id, pct) {
 }
 
 // ============================================================
-//  E-IMZO  (WebSocket CAPIWS)
-//  Urinish tartibi: ws:64646 → wss:64646 → ws:64342 → ws:64545
+//  E-IMZO — Rasmiy CAPIWS protokoli
+//  1) CAPIWS.apikey() → domen tasdiqlash
+//  2) CAPIWS.callFunction() → barcha amallar
+// ============================================================
+
+// Rasmiy CAPIWS.js ni yuklash
+function loadCAPIWS() {
+  return new Promise((res, rej) => {
+    if (window.CAPIWS) { res(); return; }
+    const s = document.createElement('script');
+    // Rasmiy CDN
+    s.src = 'https://cdn.jsdelivr.net/gh/SolijonovMuhammadAli/react-eimzo@main/src/EIMZO.js';
+    s.onload = () => res();
+    s.onerror = () => {
+      // Fallback: o'zimizning CAPIWS implementatsiyamiz
+      buildLocalCAPIWS();
+      res();
+    };
+    document.head.appendChild(s);
+  });
+}
+
+// Agar CDN ishlamasa — lokal CAPIWS implementatsiyasi (queue-based, apikey qo'llab)
+function buildLocalCAPIWS() {
+  if (window.CAPIWS) return;
+  window.CAPIWS = (() => {
+    let ws = null;
+    let queue = [];
+    let apiKeyRegistered = false;
+    const ENDPOINTS = [
+      'ws://127.0.0.1:64646/service/cryptapi',
+      'wss://127.0.0.1:64646/service/cryptapi',
+      'ws://127.0.0.1:64342/service/cryptapi',
+    ];
+
+    function _onmsg(ev) {
+      const cb = queue.shift();
+      if (!cb) return;
+      clearTimeout(cb._t);
+      try {
+        const d = JSON.parse(ev.data);
+        console.log('[CAPIWS ←]', JSON.stringify(d).slice(0, 200));
+        if (d.success === false) cb.err(null, d);
+        else cb.ok(null, d);
+      } catch(e) { cb.err(e.message, null); }
+    }
+
+    function _connect() {
+      return new Promise((res, rej) => {
+        if (ws && ws.readyState === WebSocket.OPEN) { res(); return; }
+        ws = null;
+        let tried = 0;
+        function tryNext() {
+          if (tried >= ENDPOINTS.length) { rej(new Error('E-IMZO topilmadi')); return; }
+          const url = ENDPOINTS[tried++];
+          const sock = new WebSocket(url);
+          const t = setTimeout(() => { sock.close(); tryNext(); }, 4000);
+          sock.onopen = () => {
+            clearTimeout(t); ws = sock;
+            sock.onmessage = _onmsg;
+            sock.onclose = () => { ws = null; apiKeyRegistered = false; setDot('eimzo','warn'); while(queue.length){const c=queue.shift();clearTimeout(c._t);c.err('WS yopildi',null);} };
+            log('auth', `✓ E-IMZO: ${url}`, 's');
+            setDot('eimzo','ok');
+            document.getElementById('eimzo-msg').textContent = 'Ulandi ✓';
+            res();
+          };
+          sock.onerror = () => { clearTimeout(t); sock.close(); tryNext(); };
+          sock.onclose = (ev) => { if (!ws) { clearTimeout(t); tryNext(); } };
+        }
+        tryNext();
+      });
+    }
+
+    function _send(obj) {
+      return new Promise((res, rej) => {
+        const t = setTimeout(() => {
+          const i = queue.findIndex(c => c.ok === res);
+          if (i !== -1) queue.splice(i, 1);
+          rej(new Error('timeout: ' + obj.name));
+        }, 12000);
+        queue.push({ ok: (ev, d) => res(d), err: (ev, d) => rej(new Error((d && (d.reason||d.message)) || ev || 'xatolik')), _t: t });
+        console.log('[CAPIWS →]', JSON.stringify(obj).slice(0, 200));
+        ws.send(JSON.stringify(obj));
+      });
+    }
+
+    function apikey(keys, ok, err) {
+      _connect()
+        .then(() => _send({ name: 'apikey', arguments: keys }))
+        .then(d => ok(null, d))
+        .catch(e => err(e.message));
+    }
+
+    function callFunction(params, ok, err) {
+      _connect()
+        .then(() => {
+          if (!apiKeyRegistered) return Promise.reject(new Error('Avval apikey chaqiring'));
+          return _send({ plugin: params.plugin, name: params.name, arguments: params.arguments || [] });
+        })
+        .then(d => ok(null, d))
+        .catch(e => err(e.message));
+    }
+
+    function _ensureApiKey(keys) {
+      if (apiKeyRegistered) return Promise.resolve();
+      return _connect().then(() => _send({ name: 'apikey', arguments: keys })).then(d => {
+        if (d.success) { apiKeyRegistered = true; }
+        else throw new Error(d.reason || 'apikey rad etildi');
+      });
+    }
+
+    return { apikey, callFunction, _connect, _send, _ensureApiKey };
+  })();
+}
+
 // ============================================================
 const eimzo = (() => {
-  let ws = null, queue = [];  // FIFO navbat — id ishlatilmaydi
-
-  // To'g'ri tartib: avval ws://, keyin wss://
-  // E-IMZO v3-v5 odatda ws://127.0.0.1:64646 da ishlaydi
-  const ENDPOINTS = [
-    'ws://127.0.0.1:64646/service/cryptapi',
-    'wss://127.0.0.1:64646/service/cryptapi',
-    'ws://127.0.0.1:64342/service/cryptapi',
-    'ws://127.0.0.1:64545/service/cryptapi',
-  ];
-
-  function _connect(url) {
-    return new Promise((res, rej) => {
-      let settled = false;
-      let sock;
-      try { sock = new WebSocket(url); }
-      catch(e) { rej(e); return; }
-
-      const t = setTimeout(() => {
-        if (settled) return; settled = true;
-        try { sock.close(); } catch{}
-        rej(new Error('timeout'));
-      }, 4000);
-
-      sock.onopen = () => {
-        if (settled) return; settled = true;
-        clearTimeout(t);
-        ws = sock;
-        sock.onmessage = _msg;
-        sock.onclose = () => {
-          ws = null; setDot('eimzo', 'warn');
-          while(queue.length) { const cb=queue.shift(); clearTimeout(cb._t); cb.rej(new Error('WS yopildi')); }
-        };
-        res(url);
-      };
-      sock.onerror = () => {
-        if (settled) return; settled = true;
-        clearTimeout(t);
-        try { sock.close(); } catch{}
-        rej(new Error('connect failed'));
-      };
-      sock.onclose = (ev) => {
-        if (!settled) { settled = true; clearTimeout(t); rej(new Error('closed: ' + ev.code)); }
-        ws = null; setDot('eimzo', '');
-      };
-    });
-  }
-
-  // E-IMZO queue-based protokol:
-  // id YUBORILMAYDI — server javoblar navbat bilan keladi (FIFO)
-  function _msg(ev) {
-    const cb = queue.shift();
-    if (!cb) { console.warn('E-IMZO: kutilmagan javob', ev.data); return; }
-    clearTimeout(cb._t);
-    try {
-      const d = JSON.parse(ev.data);
-      console.log('[E-IMZO response]', JSON.stringify(d).slice(0, 300));
-      if (d.success === false) {
-        cb.rej(new Error(d.reason || d.message || 'E-IMZO xatolik'));
-      } else {
-        cb.res(d);
-      }
-    } catch(e) {
-      cb.rej(new Error('JSON parse xatolik: ' + e.message));
+  // Domen API key lari — localhost/127.0.0.1 default
+  // manzursulaymonov.github.io uchun sozlamalarda kiritiladi
+  function getApiKeys() {
+    const s = gs();
+    const keys = [
+      'localhost',         '96D0C1491615C82B9A54D9989779DF825B690748224C2B04F500F370D51827CE2644D8D4A82C18184D73AB8530BB8ED537269603F61DB0D03D2104ABF789970B',
+      '127.0.0.1',        'A7BCFA5D490B351BE0754130DF03A068F855DB4333D43921125B9CF2670EF6A40370C646B90401955E1F7BC9CDBF59CE0B2C5467D820BE189C845D0B79CFC96F',
+    ];
+    // Qo'shimcha domen key lar (sozlamalardan)
+    if (s.eimzoDomain && s.eimzoKey) {
+      keys.push(s.eimzoDomain, s.eimzoKey);
     }
+    // Joriy domen ham qo'shish
+    const host = location.hostname;
+    if (host && host !== 'localhost' && host !== '127.0.0.1' && s.eimzoKey) {
+      if (!keys.includes(host)) keys.push(host, s.eimzoKey);
+    }
+    return keys;
   }
 
   async function connect() {
-    if (ws && ws.readyState === WebSocket.OPEN) return true;
-    ws = null;
+    await loadCAPIWS();
+    if (!window.CAPIWS) throw new Error('CAPIWS yuklanmadi');
 
-    for (const url of ENDPOINTS) {
-      log('auth', `   Urinilmoqda: ${url}`, 'i');
-      try {
-        const connected = await _connect(url);
-        log('auth', `✓ E-IMZO ulandi → ${connected}`, 's');
-        setDot('eimzo', 'ok');
-        document.getElementById('eimzo-msg').textContent = `Ulandi ✓`;
-        document.getElementById('eimzo-hint').textContent = url;
-        return true;
-      } catch(e) {
-        log('auth', `   ✗ ${url.split('//')[1].split('/')[0]} — ${e.message}`, 'w');
-      }
-    }
+    await window.CAPIWS._connect();
 
-    log('auth', '✗ E-IMZO hech bir portda topilmadi!', 'e');
-    log('auth', '  1) E-IMZO ilovasi ishlaymayaptimi? (System tray da ko\'ring)', 'w');
-    log('auth', '  2) https://e-imzo.uz dan yuklab o\'rnating', 'w');
-    log('auth', '  3) O\'rnatilgan bo\'lsa ilovani qayta ishga tushiring', 'w');
-    setDot('eimzo', 'err');
-    document.getElementById('eimzo-msg').textContent = 'Ulanmadi';
-    document.getElementById('eimzo-hint').innerHTML =
-      '<a href="https://e-imzo.uz" target="_blank" style="color:var(--amber)">↗ e-imzo.uz dan yuklab o\'rnating</a>';
-    return false;
+    log('auth', '→ Domain API key tekshirilmoqda...', 'i');
+    const keys = getApiKeys();
+    await window.CAPIWS._ensureApiKey(keys);
+    log('auth', '✓ API key tasdiqlandi', 's');
+    return true;
   }
 
   function call(plugin, name, args = []) {
     return new Promise((res, rej) => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        rej(new Error('E-IMZO ulanmagan')); return;
-      }
-      // Timeout — 10 soniya
-      const t = setTimeout(() => {
-        const idx = queue.findIndex(x => x.res === res);
-        if (idx !== -1) queue.splice(idx, 1);
-        rej(new Error(`timeout: ${plugin}.${name}`));
-      }, 10000);
-
-      queue.push({ res, rej, _t: t });
-
-      // E-IMZO formatiga ko'ra: id YO'Q, faqat plugin/name/arguments
-      const msg = { plugin, name, arguments: args };
-      console.log('[E-IMZO send]', JSON.stringify(msg));
-      ws.send(JSON.stringify(msg));
+      if (!window.CAPIWS) { rej(new Error('CAPIWS yuklanmadi')); return; }
+      window.CAPIWS._send({ plugin, name, arguments: args }).then(res).catch(rej);
     });
   }
 
   async function loadCerts() {
     document.getElementById('btn-load-certs').disabled = true;
     log('auth', '→ E-IMZO ga ulanmoqda...', 'i');
-    const ok = await connect();
-    if (!ok) { document.getElementById('btn-load-certs').disabled = false; return; }
 
-    log('auth', '→ Kalitlar skanerlanmoqda (barcha pluginlar)...', 'i');
+    try {
+      await connect();
+    } catch(e) {
+      log('auth', '✗ ' + e.message, 'e');
+      const host = location.hostname;
+      if (host && host !== 'localhost' && host !== '127.0.0.1') {
+        log('auth', `⚠ "${host}" domeni uchun E-IMZO API key kerak!`, 'w');
+        log('auth', '  Sozlamalar → E-IMZO Domain Key ga kiriting', 'w');
+        log('auth', '  Yoki faylni localhost da oching', 'w');
+        document.getElementById('eimzo-hint').innerHTML =
+          '<span style="color:var(--red)">Domain key kerak! ↓ Sozlamalarni oching</span>';
+        document.getElementById('eimzo-domain-warn').style.display = 'block';
+      }
+      document.getElementById('btn-load-certs').disabled = false;
+      return;
+    }
+
+    log('auth', '→ Kalitlar skanerlanmoqda...', 'i');
     let certs = [];
-    const allPlugins = ['pfx', 'ytks', 'certkey'];
 
-    // 1. list_all_certificates
-    for (const plug of allPlugins) {
+    for (const plug of ['pfx', 'ytks', 'certkey']) {
       try {
-        const r = await call(plug, 'list_all_certificates');
+        const r = await call(plug, 'list_all_certificates', []);
         const list = r.certificates || r.Certificates || [];
         if (list.length) {
           list.forEach(c => certs.push({ ...c, _plug: plug }));
-          log('auth', `✓ list_all_certificates (${plug}): ${list.length} ta`, 's');
+          log('auth', `✓ ${plug}: ${list.length} ta sertifikat`, 's');
         }
       } catch(e) {
-        log('auth', `  list_all_certificates (${plug}): ${e.message}`, 'w');
+        log('auth', `  ${plug}.list_all_certificates: ${e.message}`, 'w');
       }
     }
 
-    // 2. Disklar bo'yicha skanerlash
+    // Disk skanerlash
     const foundDisks = {};
-    for (const plug of allPlugins) {
+    for (const plug of ['pfx', 'ytks', 'certkey']) {
       try {
-        const dr = await call(plug, 'list_disks');
+        const dr = await call(plug, 'list_disks', []);
         const disks = dr.disks || dr.Disks || [];
         if (disks.length) {
           foundDisks[plug] = disks;
-          log('auth', `  Disklar (${plug}): ${disks.join(', ')}`, 'i');
           for (const disk of disks) {
             try {
               const cr = await call(plug, 'list_certificates', [disk]);
               const list = cr.certificates || cr.Certificates || [];
-              if (list.length) {
-                list.forEach(c => {
-                  const sn = c.serialNumber || c.SerialNumber || '';
-                  const exists = certs.some(x => (x.serialNumber||x.SerialNumber||'') === sn && x._plug === plug);
-                  if (!exists) certs.push({ ...c, _plug: plug, _disk: disk });
-                });
-                log('auth', `  ✓ ${plug}[${disk}]: ${list.length} ta`, 's');
-              }
-            } catch(e2) {
-              log('auth', `  list_certificates (${plug}, ${disk}): ${e2.message}`, 'w');
-            }
+              list.forEach(c => {
+                const sn = c.serialNumber || c.SerialNumber || '';
+                if (!certs.some(x => (x.serialNumber||x.SerialNumber||'') === sn && x._plug === plug))
+                  certs.push({ ...c, _plug: plug, _disk: disk });
+              });
+              if (list.length) log('auth', `✓ ${plug}[${disk}]: ${list.length} ta`, 's');
+            } catch(e2) { log('auth', `  ${plug}[${disk}]: ${e2.message}`, 'w'); }
           }
         }
-      } catch(e) {
-        log('auth', `  list_disks (${plug}): ${e.message}`, 'w');
-      }
+      } catch(e) { log('auth', `  ${plug}.list_disks: ${e.message}`, 'w'); }
     }
 
     showDisks(foundDisks);
-
     if (certs.length) {
-      log('auth', `✓ Jami ${certs.length} ta sertifikat topildi`, 's');
+      log('auth', `✓ Jami ${certs.length} ta sertifikat`, 's');
     } else {
       log('auth', "⚠ Sertifikat topilmadi. Quyida qo'lda kiritishni ishlating.", 'w');
     }
-
     renderKeys(certs);
     markStep('s1', 'done');
     document.getElementById('btn-load-certs').disabled = false;
   }
 
   async function loadKey(cert) {
-    // Agar manual yuklanib bo'lgan bo'lsa keyId ni qaytaramiz
-    if (cert._manualKeyId) {
-      log('auth', `✓ keyId (manual, cached): ${cert._manualKeyId}`, 's');
-      return cert._manualKeyId;
-    }
+    if (cert._manualKeyId) { log('auth', `✓ keyId (cached): ${cert._manualKeyId}`, 's'); return cert._manualKeyId; }
     const plug = cert._plug || 'pfx';
-    const cn = cert.CN || cert.commonName || cert.subjectName || cert.serialNumber || '?';
+    const cn = cert.CN || cert.commonName || cert.subjectName || cert.alias || cert.serialNumber || '?';
     log('auth', `→ Kalit yuklanmoqda: ${cn} [${plug}]`, 'i');
+
+    // pfx.list_all_certificates dan kelgan maydonlar:
+    // disk, path, name, alias — bularni to'g'ri ajratib olish
+    let disk = cert.disk || cert.Disk || cert._disk || '';
+    let path = cert.path || cert.Path || '';
+    let name = cert.name || cert.Name || cert.fileName || '';
+    let alias = cert.alias || cert.Alias || cert.keyAlias || '';
+    let serial = cert.serialNumber || cert.SerialNumber || '';
+
+    log('auth', `  disk="${disk}" path="${path}" name="${name}" alias="${alias}" sn="${serial}"`, 'i');
 
     let args;
     if (plug === 'pfx') {
-      args = [cert._disk || '', cert.path || '', cert.name || '', cert.alias || ''];
+      // pfx.load_key: [disk, path, name, alias]
+      // disk bo'sh bo'lsa list_all_certificates disk ni qaytarmagan demak
+      // certni qayta list_certificates orqali olgan bo'lsak _disk mavjud
+      args = [disk, path, name, alias];
     } else if (plug === 'ytks') {
-      args = [cert._disk || '', cert.path || '', cert.name || '', cert.alias || '', cert.serialNumber || ''];
+      args = [disk, path, name, alias, serial];
     } else {
-      // certkey — serialNumber majburiy
-      args = [cert._disk || '', cert.path || 'DSKEYS', cert.name || '', cert.serialNumber || ''];
+      // certkey: [disk, path, name, serialNumber]
+      args = [disk, path || 'DSKEYS', name, serial];
     }
 
-    log('auth', `  args: ${JSON.stringify(args)}`, 'i');
+    log('auth', `  load_key args: ${JSON.stringify(args)}`, 'i');
     const r = await call(plug, 'load_key', args);
     const kid = r.keyId || r.id || r.keyID;
     if (!kid) throw new Error('keyId kelmadi: ' + JSON.stringify(r));
@@ -1169,9 +1249,13 @@ function onCertSelect(sel) {
     return;
   }
   const c = window._certs[idx];
+
+  // Raw sertifikat ma'lumotlarini log ga chiqarish
+  log('auth', `  Raw cert fields: ${JSON.stringify(c).slice(0, 400)}`, 'i');
+
   ST.selectedCert = c;
   ST.keyId = null;
-  const cn = c.CN || c.commonName || c.subjectName || c.name || 'Sertifikat';
+  const cn = c.CN || c.commonName || c.subjectName || c.name || c.alias || 'Sertifikat';
   const sn = c.serialNumber || c.SerialNumber || '—';
   document.getElementById('sel-cn').textContent = cn;
   document.getElementById('sel-sn').textContent = 'SN: ' + sn + ' | ' + (c._plug||'').toUpperCase() + (c._disk ? ' | disk: '+c._disk : '');
