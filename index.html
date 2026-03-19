@@ -314,14 +314,74 @@ tr:hover td{background:rgba(255,255,255,0.015)}
 
   <!-- E-IMZO -->
   <div class="card">
-    <div class="card-hd">E-IMZO — Kalit tanlash <span id="eimzo-hint">Plugin ishlaymayapti?</span></div>
-    <div class="row" style="margin-bottom:14px">
-      <button class="btn btn-ghost" id="btn-load-certs" onclick="eimzo.loadCerts()">↺ Kalitlarni yuklash</button>
-      <span id="eimzo-msg" style="font-size:11px;font-family:var(--mono);color:var(--muted)">E-IMZO ga ulanish tekshirilmoqda...</span>
+    <div class="card-hd">E-IMZO — Kalit tanlash <span id="eimzo-hint"></span></div>
+    <div class="row" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <button class="btn btn-ghost" id="btn-load-certs" onclick="eimzo.loadCerts()">↺ Kalitlarni skanerlash</button>
+      <span id="eimzo-msg" style="font-size:11px;font-family:var(--mono);color:var(--muted)">Ulanish tekshirilmoqda...</span>
     </div>
-    <div id="key-list" class="key-list">
-      <div class="empty" style="padding:20px">Kalitlarni yuklash tugmasini bosing</div>
+    <!-- Tanlangan kalit -->
+    <div id="sel-cert-box" style="display:none;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--amber-d);border:1px solid var(--amber-b);border-radius:6px">
+        <span style="color:var(--amber);font-size:16px">&#128273;</span>
+        <div style="flex:1">
+          <div style="font-family:var(--mono);font-size:12px;color:var(--amber)" id="sel-cn">—</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted)" id="sel-sn">—</div>
+        </div>
+        <button class="btn btn-xs btn-ghost" onclick="clearCert()">x</button>
+      </div>
     </div>
+    <!-- Dropdown -->
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:10px;font-family:var(--mono);color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.8px">Topilgan kalitlar</label>
+      <select id="cert-select" style="width:100%" onchange="onCertSelect(this)">
+        <option value="">— Skanerlang —</option>
+      </select>
+    </div>
+    <!-- Disk ro'yxati -->
+    <div id="disk-scan-box" style="display:none;margin-bottom:12px">
+      <div style="font-size:10px;font-family:var(--mono);color:var(--muted);margin-bottom:6px">Topilgan disklar:</div>
+      <div id="disk-list" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
+    <!-- Manual kalit kiritish -->
+    <details>
+      <summary style="font-size:11px;font-family:var(--mono);color:var(--muted);cursor:pointer;user-select:none;padding:6px 0">&#9658; Kalitni qo'lda kiritish (skanerlash ishlamasa)</summary>
+      <div style="margin-top:12px;padding:14px;background:var(--bg3);border-radius:6px;border:1px solid var(--border)">
+        <div class="grid2">
+          <div class="fg">
+            <label>Plugin turi</label>
+            <select id="m-plug">
+              <option value="pfx">pfx (PFX/P12 fayl)</option>
+              <option value="ytks">ytks (YTKS fayl)</option>
+              <option value="certkey">certkey (DS kalit)</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Disk (A:, C:, D: ...)</label>
+            <input type="text" id="m-disk" placeholder="A:">
+          </div>
+          <div class="fg">
+            <label>Yo'l (path)</label>
+            <input type="text" id="m-path" placeholder="DSKEYS yoki bosh">
+          </div>
+          <div class="fg">
+            <label>Fayl nomi (kengashmasiz)</label>
+            <input type="text" id="m-name" placeholder="KEYS">
+          </div>
+          <div class="fg">
+            <label>Alias</label>
+            <input type="text" id="m-alias" placeholder="bosh qoldiring">
+          </div>
+          <div class="fg">
+            <label>SerialNumber (certkey)</label>
+            <input type="text" id="m-serial" placeholder="HEX">
+          </div>
+        </div>
+        <button class="btn btn-amber btn-sm" onclick="loadManualKey()">&#128273; Kalitni yuklash</button>
+        <div style="margin-top:10px;font-size:10px;color:var(--muted);font-family:var(--mono);line-height:1.8">
+          certkey: Disk=A:, Path=DSKEYS &nbsp;|&nbsp; pfx: Disk=C:, Name=fayl_nomi
+        </div>
+      </div>
+    </details>
   </div>
 
   <!-- DIDOX login -->
@@ -827,31 +887,61 @@ const eimzo = (() => {
     const ok = await connect();
     if (!ok) { document.getElementById('btn-load-certs').disabled = false; return; }
 
-    log('auth', '→ Sertifikatlar yuklanmoqda...', 'i');
+    log('auth', '→ Kalitlar skanerlanmoqda (barcha pluginlar)...', 'i');
     let certs = [];
+    const allPlugins = ['pfx', 'ytks', 'certkey'];
 
-    for (const plug of ['pfx', 'ytks', 'certkey']) {
+    // 1. list_all_certificates
+    for (const plug of allPlugins) {
       try {
         const r = await call(plug, 'list_all_certificates');
-        if (r.certificates?.length) {
-          certs = r.certificates.map(c => ({ ...c, _plug: plug }));
-          log('auth', `✓ ${certs.length} ta sertifikat (${plug})`, 's');
-          break;
+        const list = r.certificates || r.Certificates || [];
+        if (list.length) {
+          list.forEach(c => certs.push({ ...c, _plug: plug }));
+          log('auth', `✓ list_all_certificates (${plug}): ${list.length} ta`, 's');
         }
-      } catch {}
+      } catch(e) {
+        log('auth', `  list_all_certificates (${plug}): ${e.message}`, 'w');
+      }
     }
 
-    // Fallback: list disks → list_certificates per disk
-    if (!certs.length) {
-      for (const plug of ['pfx', 'ytks']) {
-        try {
-          const dr = await call(plug, 'list_disks');
-          for (const disk of (dr.disks || [])) {
-            const cr = await call(plug, 'list_certificates', [disk]);
-            (cr.certificates || []).forEach(c => certs.push({ ...c, _plug: plug, _disk: disk }));
+    // 2. Disklar bo'yicha skanerlash
+    const foundDisks = {};
+    for (const plug of allPlugins) {
+      try {
+        const dr = await call(plug, 'list_disks');
+        const disks = dr.disks || dr.Disks || [];
+        if (disks.length) {
+          foundDisks[plug] = disks;
+          log('auth', `  Disklar (${plug}): ${disks.join(', ')}`, 'i');
+          for (const disk of disks) {
+            try {
+              const cr = await call(plug, 'list_certificates', [disk]);
+              const list = cr.certificates || cr.Certificates || [];
+              if (list.length) {
+                list.forEach(c => {
+                  const sn = c.serialNumber || c.SerialNumber || '';
+                  const exists = certs.some(x => (x.serialNumber||x.SerialNumber||'') === sn && x._plug === plug);
+                  if (!exists) certs.push({ ...c, _plug: plug, _disk: disk });
+                });
+                log('auth', `  ✓ ${plug}[${disk}]: ${list.length} ta`, 's');
+              }
+            } catch(e2) {
+              log('auth', `  list_certificates (${plug}, ${disk}): ${e2.message}`, 'w');
+            }
           }
-        } catch {}
+        }
+      } catch(e) {
+        log('auth', `  list_disks (${plug}): ${e.message}`, 'w');
       }
+    }
+
+    showDisks(foundDisks);
+
+    if (certs.length) {
+      log('auth', `✓ Jami ${certs.length} ta sertifikat topildi`, 's');
+    } else {
+      log('auth', "⚠ Sertifikat topilmadi. Quyida qo'lda kiritishni ishlating.", 'w');
     }
 
     renderKeys(certs);
@@ -860,17 +950,29 @@ const eimzo = (() => {
   }
 
   async function loadKey(cert) {
-    const plug = cert._plug || 'pfx';
-    log('auth', `→ Kalit yuklanmoqda: ${cert.CN || cert.commonName || cert.serialNumber || '?'}`, 'i');
-    let r;
-    if (plug === 'pfx') {
-      r = await call('pfx', 'load_key', [cert._disk || '', cert.path || '', cert.name || '', cert.alias || '']);
-    } else if (plug === 'ytks') {
-      r = await call('ytks', 'load_key', [cert._disk || '', cert.path || '', cert.name || '', cert.alias || '', cert.serialNumber || '']);
-    } else {
-      r = await call('certkey', 'load_key', [cert._disk || '', cert.path || 'DSKEYS', cert.name || '', cert.serialNumber || '']);
+    // Agar manual yuklanib bo'lgan bo'lsa keyId ni qaytaramiz
+    if (cert._manualKeyId) {
+      log('auth', `✓ keyId (manual, cached): ${cert._manualKeyId}`, 's');
+      return cert._manualKeyId;
     }
-    const kid = r.keyId || r.id;
+    const plug = cert._plug || 'pfx';
+    const cn = cert.CN || cert.commonName || cert.subjectName || cert.serialNumber || '?';
+    log('auth', `→ Kalit yuklanmoqda: ${cn} [${plug}]`, 'i');
+
+    let args;
+    if (plug === 'pfx') {
+      args = [cert._disk || '', cert.path || '', cert.name || '', cert.alias || ''];
+    } else if (plug === 'ytks') {
+      args = [cert._disk || '', cert.path || '', cert.name || '', cert.alias || '', cert.serialNumber || ''];
+    } else {
+      // certkey — serialNumber majburiy
+      args = [cert._disk || '', cert.path || 'DSKEYS', cert.name || '', cert.serialNumber || ''];
+    }
+
+    log('auth', `  args: ${JSON.stringify(args)}`, 'i');
+    const r = await call(plug, 'load_key', args);
+    const kid = r.keyId || r.id || r.keyID;
+    if (!kid) throw new Error('keyId kelmadi: ' + JSON.stringify(r));
     log('auth', `✓ keyId: ${kid}`, 's');
     return kid;
   }
@@ -885,36 +987,114 @@ const eimzo = (() => {
   return { connect, call, loadCerts, loadKey, sign };
 })();
 
+// Sertifikat dropdown
 function renderKeys(certs) {
-  const el = document.getElementById('key-list');
-  if (!certs?.length) {
-    el.innerHTML = '<div class="empty" style="padding:20px">Sertifikat topilmadi. USB kalit ulangan?</div>';
+  const sel = document.getElementById('cert-select');
+  sel.innerHTML = '<option value="">— Tanlang —</option>';
+
+  if (!certs || !certs.length) {
+    sel.innerHTML = '<option value="">Sertifikat topilmadi</option>';
     return;
   }
-  el.innerHTML = '';
+
   certs.forEach((c, i) => {
-    const d = document.createElement('div');
-    d.className = 'key-item';
-    const cn = c.CN || c.commonName || c.subjectName || 'Sertifikat #' + (i+1);
-    const sn = c.serialNumber || '—';
+    const cn  = c.CN || c.commonName || c.subjectName || c.name || 'Sertifikat #' + (i+1);
+    const sn  = c.serialNumber || c.SerialNumber || '';
     const exp = c.validTo || c.notAfter || '';
-    d.innerHTML = `
-      <div>
-        <div class="key-cn">${cn}</div>
-        <div class="key-meta">SN: ${sn}${exp ? ' · ' + exp : ''}</div>
-      </div>
-      <span class="key-tag">${(c._plug || '').toUpperCase() || 'KEY'}</span>
-    `;
-    d.onclick = () => {
-      document.querySelectorAll('.key-item').forEach(k => k.classList.remove('sel'));
-      d.classList.add('sel');
-      ST.selectedCert = c;
-      ST.keyId = null;
-      log('auth', `✓ Tanlandi: ${cn}`, 's');
-      markStep('s2', 'done');
-    };
-    el.appendChild(d);
+    const plug = (c._plug || '').toUpperCase();
+    const disk = c._disk ? ` [${c._disk}]` : '';
+    const label = `${cn}${exp ? ' · ' + exp : ''}${disk} (${plug})`;
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = label;
+    opt._cert = c;
+    sel.appendChild(opt);
+    // store on window for retrieval
+    window._certs = window._certs || [];
+    window._certs[i] = c;
   });
+
+  // Agar bitta bo'lsa avtomatik tanlash
+  if (certs.length === 1) {
+    sel.value = '0';
+    onCertSelect(sel);
+  }
+}
+
+function onCertSelect(sel) {
+  const idx = parseInt(sel.value);
+  if (isNaN(idx) || !window._certs || !window._certs[idx]) {
+    ST.selectedCert = null;
+    document.getElementById('sel-cert-box').style.display = 'none';
+    return;
+  }
+  const c = window._certs[idx];
+  ST.selectedCert = c;
+  ST.keyId = null;
+  const cn = c.CN || c.commonName || c.subjectName || c.name || 'Sertifikat';
+  const sn = c.serialNumber || c.SerialNumber || '—';
+  document.getElementById('sel-cn').textContent = cn;
+  document.getElementById('sel-sn').textContent = 'SN: ' + sn + ' | ' + (c._plug||'').toUpperCase() + (c._disk ? ' | disk: '+c._disk : '');
+  document.getElementById('sel-cert-box').style.display = 'block';
+  log('auth', `✓ Kalit tanlandi: ${cn}`, 's');
+  markStep('s2', 'done');
+}
+
+function clearCert() {
+  ST.selectedCert = null; ST.keyId = null;
+  document.getElementById('sel-cert-box').style.display = 'none';
+  document.getElementById('cert-select').value = '';
+  markStep('s2', '');
+}
+
+function showDisks(foundDisks) {
+  const box  = document.getElementById('disk-scan-box');
+  const list = document.getElementById('disk-list');
+  const entries = Object.entries(foundDisks);
+  if (!entries.length) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  list.innerHTML = entries.map(([plug, disks]) =>
+    disks.map(d => `<span style="padding:3px 10px;background:var(--bg4);border:1px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:11px;color:var(--amber)">${d} <span style="color:var(--muted)">${plug}</span></span>`).join('')
+  ).join('');
+}
+
+// Manual kalit yuklash
+async function loadManualKey() {
+  const plug   = document.getElementById('m-plug').value;
+  const disk   = document.getElementById('m-disk').value.trim();
+  const path   = document.getElementById('m-path').value.trim();
+  const name   = document.getElementById('m-name').value.trim();
+  const alias  = document.getElementById('m-alias').value.trim();
+  const serial = document.getElementById('m-serial').value.trim();
+
+  log('auth', `→ Manual kalit yuklanmoqda: ${plug} | disk=${disk} path=${path} name=${name}`, 'i');
+
+  const ok = await eimzo.connect();
+  if (!ok) return;
+
+  try {
+    let args;
+    if (plug === 'pfx')     args = [disk, path, name, alias];
+    else if (plug === 'ytks') args = [disk, path, name, alias, serial];
+    else                    args = [disk, path || 'DSKEYS', name, serial];
+
+    const r = await eimzo.call(plug, 'load_key', args);
+    const kid = r.keyId || r.id || r.keyID;
+    if (!kid) throw new Error('keyId kelmadi: ' + JSON.stringify(r));
+
+    ST.keyId = kid;
+    const fakeSerial = serial || name || 'manual';
+    ST.selectedCert = { _plug: plug, _disk: disk, path, name, alias, serialNumber: fakeSerial, CN: name || 'Manual kalit', _manualKeyId: kid };
+
+    document.getElementById('sel-cn').textContent = name || 'Manual kalit';
+    document.getElementById('sel-sn').textContent = `keyId: ${kid} | ${plug}`;
+    document.getElementById('sel-cert-box').style.display = 'block';
+
+    log('auth', `✓ Manual kalit yuklandi! keyId: ${kid}`, 's');
+    markStep('s2', 'done');
+  } catch(e) {
+    log('auth', '✗ ' + e.message, 'e');
+  }
 }
 
 function markStep(id, cls) {
