@@ -788,7 +788,7 @@ function pb(id, pct) {
 //  Urinish tartibi: ws:64646 → wss:64646 → ws:64342 → ws:64545
 // ============================================================
 const eimzo = (() => {
-  let ws = null, mid = 0, pending = {};
+  let ws = null, queue = [];  // FIFO navbat — id ishlatilmaydi
 
   // To'g'ri tartib: avval ws://, keyin wss://
   // E-IMZO v3-v5 odatda ws://127.0.0.1:64646 da ishlaydi
@@ -817,7 +817,10 @@ const eimzo = (() => {
         clearTimeout(t);
         ws = sock;
         sock.onmessage = _msg;
-        sock.onclose = () => { ws = null; setDot('eimzo', 'warn'); };
+        sock.onclose = () => {
+          ws = null; setDot('eimzo', 'warn');
+          while(queue.length) { const cb=queue.shift(); clearTimeout(cb._t); cb.rej(new Error('WS yopildi')); }
+        };
         res(url);
       };
       sock.onerror = () => {
@@ -833,22 +836,23 @@ const eimzo = (() => {
     });
   }
 
+  // E-IMZO queue-based protokol:
+  // id YUBORILMAYDI — server javoblar navbat bilan keladi (FIFO)
   function _msg(ev) {
+    const cb = queue.shift();
+    if (!cb) { console.warn('E-IMZO: kutilmagan javob', ev.data); return; }
+    clearTimeout(cb._t);
     try {
       const d = JSON.parse(ev.data);
-      const id = d.id || '__';
-      const cb = pending[id];
-      if (!cb) return;
-      delete pending[id];
-      // E-IMZO xatolik belgilari
+      console.log('[E-IMZO response]', JSON.stringify(d).slice(0, 300));
       if (d.success === false) {
         cb.rej(new Error(d.reason || d.message || 'E-IMZO xatolik'));
-      } else if (d.reason && d.reason !== 'ok' && !d.keyId && !d.certificates && !d.pkcs7_64 && !d.disks) {
-        cb.rej(new Error(d.reason));
       } else {
         cb.res(d);
       }
-    } catch(e) { console.warn('E-IMZO msg parse:', e); }
+    } catch(e) {
+      cb.rej(new Error('JSON parse xatolik: ' + e.message));
+    }
   }
 
   async function connect() {
@@ -882,11 +886,22 @@ const eimzo = (() => {
 
   function call(plugin, name, args = []) {
     return new Promise((res, rej) => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) { rej(new Error('E-IMZO WebSocket ulanmagan')); return; }
-      const id = String(++mid);
-      pending[id] = { res, rej };
-      setTimeout(() => { if (pending[id]) { delete pending[id]; rej(new Error('E-IMZO timeout (15s)')); } }, 15000);
-      ws.send(JSON.stringify({ id, plugin, name, arguments: args }));
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        rej(new Error('E-IMZO ulanmagan')); return;
+      }
+      // Timeout — 10 soniya
+      const t = setTimeout(() => {
+        const idx = queue.findIndex(x => x.res === res);
+        if (idx !== -1) queue.splice(idx, 1);
+        rej(new Error(`timeout: ${plugin}.${name}`));
+      }, 10000);
+
+      queue.push({ res, rej, _t: t });
+
+      // E-IMZO formatiga ko'ra: id YO'Q, faqat plugin/name/arguments
+      const msg = { plugin, name, arguments: args };
+      console.log('[E-IMZO send]', JSON.stringify(msg));
+      ws.send(JSON.stringify(msg));
     });
   }
 
