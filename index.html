@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DIDOX Bridge — Sheets & PDF</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #090b0f;
+  --bg2:     #0f1117;
+  --bg3:     #161923;
+  --bg4:     #1d2230;
+  --border:  rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.13);
+  --text:    #dde1ea;
+  --muted:   #5c6478;
+  --muted2:  #8892a4;
+  --amber:   #f5a623;
+  --amber-d: rgba(245,166,35,0.10);
+  --amber-b: rgba(245,166,35,0.22);
+  --teal:    #1fc8b0;
+  --teal-d:  rgba(31,200,176,0.10);
+  --red:     #f04040;
+  --red-d:   rgba(240,64,64,0.12);
+  --green:   #3dd68c;
+  --green-d: rgba(61,214,140,0.10);
+  --mono:    'IBM Plex Mono', monospace;
+  --sans:    'IBM Plex Sans', sans-serif;
+  --rad:     8px;
+  --rad-sm:  5px;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;line-height:1.5}
+
+/* ---- SCROLLBAR ---- */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+
+/* ---- HEADER ---- */
+header{
+  position:sticky;top:0;z-index:50;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 28px;height:52px;
+  background:rgba(9,11,15,0.92);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+}
+.logo{
+  font-family:var(--mono);font-size:15px;font-weight:500;
+  letter-spacing:-0.5px;color:var(--text);user-select:none;
+}
+.logo em{color:var(--amber);font-style:normal}
+.logo small{color:var(--muted);font-size:11px;margin-left:8px}
+
+.hdr-right{display:flex;align-items:center;gap:20px}
+.status-row{display:flex;gap:16px}
+.status-item{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--bg4);border:1px solid var(--border2);transition:all .3s}
+.dot.ok{background:var(--green);border-color:var(--green);box-shadow:0 0 5px var(--green)}
+.dot.err{background:var(--red);border-color:var(--red)}
+.dot.warn{background:var(--amber);border-color:var(--amber)}
+
+/* ---- TABS ---- */
+.tabs{
+  display:flex;padding:0 28px;
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  overflow-x:auto;gap:2px;
+}
+.tab{
+  padding:12px 18px;cursor:pointer;
+  font-size:12px;font-family:var(--mono);font-weight:500;
+  color:var(--muted);border-bottom:2px solid transparent;
+  transition:all .2s;white-space:nowrap;user-select:none;
+}
+.tab:hover{color:var(--text)}
+.tab.on{color:var(--amber);border-bottom-color:var(--amber)}
+.tab-num{opacity:.4;margin-right:6px}
+
+/* ---- LAYOUT ---- */
+.wrap{max-width:980px;margin:0 auto;padding:24px 28px}
+.panel{display:none}.panel.on{display:block}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+
+/* ---- CARDS ---- */
+.card{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--rad);padding:20px;margin-bottom:16px;
+}
+.card-hd{
+  font-size:10px;font-weight:600;text-transform:uppercase;
+  letter-spacing:1.2px;color:var(--muted);margin-bottom:16px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.card-hd span{font-size:11px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2)}
+
+/* ---- FORM ---- */
+.fg{margin-bottom:14px}
+label{display:block;font-size:11px;font-family:var(--mono);color:var(--muted);margin-bottom:5px}
+input,select,textarea{
+  width:100%;background:var(--bg3);
+  border:1px solid var(--border);border-radius:var(--rad-sm);
+  padding:9px 12px;color:var(--text);
+  font-family:var(--mono);font-size:12px;
+  outline:none;transition:border-color .2s;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--amber);background:var(--bg4)}
+select option{background:var(--bg3)}
+textarea{resize:vertical;min-height:72px;line-height:1.6}
+input::placeholder,textarea::placeholder{color:var(--muted)}
+
+/* ---- BUTTONS ---- */
+.btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:9px 18px;border:none;border-radius:var(--rad-sm);
+  font-family:var(--mono);font-size:12px;font-weight:500;
+  cursor:pointer;transition:all .18s;user-select:none;
+  white-space:nowrap;
+}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-amber{background:var(--amber);color:#0a0c10}
+.btn-amber:hover:not(:disabled){background:#fbb846}
+.btn-teal{background:var(--teal);color:#0a0c10}
+.btn-teal:hover:not(:disabled){background:#2eddc2}
+.btn-ghost{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+.btn-ghost:hover:not(:disabled){border-color:var(--amber);color:var(--amber)}
+.btn-danger{background:var(--red-d);color:var(--red);border:1px solid rgba(240,64,64,0.25)}
+.btn-danger:hover:not(:disabled){background:rgba(240,64,64,0.2)}
+.btn-sm{padding:6px 12px;font-size:11px}
+.btn-xs{padding:4px 10px;font-size:10px}
+.row{display:flex;align-items:center;gap:10px}
+.row-end{justify-content:flex-end}
+.row-wrap{flex-wrap:wrap}
+
+/* ---- KEYS LIST ---- */
+.key-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto}
+.key-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;background:var(--bg3);
+  border:1px solid var(--border);border-radius:var(--rad-sm);
+  cursor:pointer;transition:all .2s;
+}
+.key-item:hover{border-color:var(--border2);background:var(--bg4)}
+.key-item.sel{border-color:var(--amber);background:var(--amber-d)}
+.key-cn{font-family:var(--mono);font-size:12px;color:var(--amber)}
+.key-meta{font-size:10px;color:var(--muted);margin-top:3px;font-family:var(--mono)}
+.key-tag{
+  font-size:10px;padding:2px 7px;border-radius:3px;
+  background:var(--bg4);color:var(--muted2);font-family:var(--mono);
+}
+.sel .key-tag{background:var(--amber-b);color:var(--amber)}
+
+/* ---- TOKEN BOX ---- */
+.token-box{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 14px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--rad-sm);font-family:var(--mono);font-size:11px;
+  margin-bottom:12px;
+}
+.token-box .lbl{color:var(--muted);flex-shrink:0}
+.token-box .val{color:var(--amber);word-break:break-all}
+.token-box .exp{color:var(--green);margin-left:auto;white-space:nowrap}
+
+/* ---- TABLE ---- */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--rad-sm)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{
+  background:var(--bg3);padding:8px 12px;text-align:left;
+  font-family:var(--mono);font-weight:500;font-size:10px;
+  color:var(--muted);border-bottom:1px solid var(--border);
+  white-space:nowrap;user-select:none;
+}
+td{padding:7px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,0.015)}
+.mono{font-family:var(--mono)}
+.amber{color:var(--amber)}
+.muted{color:var(--muted)}
+
+/* ---- BADGE ---- */
+.badge{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-family:var(--mono)}
+.b0{background:rgba(92,100,120,.2);color:#6b7280}
+.b1{background:var(--amber-d);color:var(--amber)}
+.b2{background:rgba(100,120,220,.15);color:#818cf8}
+.b3{background:var(--green-d);color:var(--green)}
+.b4{background:var(--red-d);color:var(--red)}
+.b5{background:var(--red-d);color:var(--muted)}
+
+/* ---- LOG ---- */
+.log{
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:var(--rad-sm);padding:10px 14px;
+  font-family:var(--mono);font-size:11px;
+  max-height:150px;overflow-y:auto;line-height:1.7;
+}
+.le{color:var(--muted2)}
+.le.i{color:#5ba3c9}
+.le.s{color:var(--green)}
+.le.e{color:var(--red)}
+.le.w{color:var(--amber)}
+
+/* ---- PROGRESS ---- */
+.pbar{height:2px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:10px}
+.pfill{height:100%;background:var(--amber);width:0;transition:width .35s ease;border-radius:2px}
+
+/* ---- INFO BOX ---- */
+.info-box{
+  padding:11px 15px;border-radius:var(--rad-sm);
+  font-size:12px;line-height:1.6;margin-bottom:16px;
+}
+.ib-amber{background:var(--amber-d);border:1px solid var(--amber-b);color:#fcd47b}
+.ib-teal{background:var(--teal-d);border:1px solid rgba(31,200,176,.22);color:#7ee8d8}
+.ib-red{background:var(--red-d);border:1px solid rgba(240,64,64,.22);color:#f87171}
+.info-box code{
+  background:rgba(0,0,0,.3);padding:1px 5px;border-radius:3px;
+  font-family:var(--mono);font-size:11px;
+}
+
+/* ---- EMPTY ---- */
+.empty{text-align:center;padding:32px;color:var(--muted);font-size:13px}
+
+/* ---- PDF PREVIEW ---- */
+.file-chip{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:7px 12px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--rad-sm);font-family:var(--mono);font-size:11px;
+  margin-top:10px;
+}
+.file-chip .ic{color:var(--red);font-size:14px}
+.file-chip .name{color:var(--text)}
+.file-chip .sz{color:var(--muted)}
+
+/* ---- PAYLOAD ---- */
+.payload-pre{
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:var(--rad-sm);padding:14px;
+  font-family:var(--mono);font-size:11px;color:var(--teal);
+  overflow:auto;max-height:220px;line-height:1.7;
+  white-space:pre-wrap;word-break:break-all;
+}
+
+/* ---- DRAWER ---- */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:90;display:none;backdrop-filter:blur(2px)}
+.drawer{
+  position:fixed;right:0;top:0;bottom:0;width:420px;
+  background:var(--bg2);border-left:1px solid var(--border);
+  z-index:91;padding:24px;overflow-y:auto;
+  transform:translateX(100%);transition:transform .28s ease;
+}
+.drawer.open{transform:translateX(0)}
+.drawer-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+.drawer-hd h2{font-size:15px;font-weight:500}
+.drawer-section{margin-bottom:26px;padding-bottom:26px;border-bottom:1px solid var(--border)}
+.drawer-section:last-child{border-bottom:none}
+.drawer-section h3{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:14px}
+.code-snippet{
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--rad-sm);
+  padding:12px;font-family:var(--mono);font-size:10px;color:var(--muted2);
+  line-height:1.7;overflow-x:auto;white-space:pre;margin-bottom:12px;
+}
+
+/* ---- STEP BADGE ---- */
+.steps{display:flex;flex-direction:column;gap:6px}
+.step{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;background:var(--bg3);border-radius:var(--rad-sm);border:1px solid var(--border)}
+.step-num{
+  width:20px;height:20px;border-radius:50%;
+  background:var(--bg4);color:var(--muted);
+  font-family:var(--mono);font-size:10px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;margin-top:1px;
+}
+.step.done .step-num{background:var(--green-d);color:var(--green)}
+.step.active .step-num{background:var(--amber-d);color:var(--amber)}
+.step-text{font-size:12px;line-height:1.5}
+.step-sub{font-size:11px;color:var(--muted);font-family:var(--mono)}
+
+@media(max-width:640px){
+  .grid2{grid-template-columns:1fr}
+  .wrap{padding:16px}
+  header{padding:0 16px}
+  .tabs{padding:0 16px}
+  .drawer{width:100%}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">DIDOX<em>//</em>BRIDGE <small>v1.0</small></div>
+  <div class="hdr-right">
+    <div class="status-row">
+      <div class="status-item"><div class="dot" id="d-eimzo"></div>E-IMZO</div>
+      <div class="status-item"><div class="dot" id="d-didox"></div>DIDOX</div>
+      <div class="status-item"><div class="dot" id="d-sheets"></div>SHEETS</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="openDrawer()">⚙ Sozlamalar</button>
+  </div>
+</header>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab on"  data-p="auth"  onclick="goTab(this)"><span class="tab-num">01</span>Ulanish</div>
+  <div class="tab"     data-p="docs"  onclick="goTab(this)"><span class="tab-num">02</span>Hujjatlar → Sheets</div>
+  <div class="tab"     data-p="pdf"   onclick="goTab(this)"><span class="tab-num">03</span>PDF → DIDOX</div>
+</div>
+
+<!-- ===================== TAB 1 : AUTH ===================== -->
+<div class="wrap">
+<div class="panel on" id="p-auth">
+
+  <!-- E-IMZO -->
+  <div class="card">
+    <div class="card-hd">E-IMZO — Kalit tanlash <span id="eimzo-hint">Plugin ishlaymayapti?</span></div>
+    <div class="row" style="margin-bottom:14px">
+      <button class="btn btn-ghost" id="btn-load-certs" onclick="eimzo.loadCerts()">↺ Kalitlarni yuklash</button>
+      <span id="eimzo-msg" style="font-size:11px;font-family:var(--mono);color:var(--muted)">E-IMZO ga ulanish tekshirilmoqda...</span>
+    </div>
+    <div id="key-list" class="key-list">
+      <div class="empty" style="padding:20px">Kalitlarni yuklash tugmasini bosing</div>
+    </div>
+  </div>
+
+  <!-- DIDOX login -->
+  <div class="card">
+    <div class="card-hd">DIDOX Autentifikatsiya</div>
+    <div id="token-wrap" style="display:none">
+      <div class="token-box">
+        <span class="lbl">Token:</span>
+        <span class="val" id="tok-val"></span>
+        <span class="exp" id="tok-exp"></span>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn btn-amber" id="btn-login" onclick="doLogin()">⚡ DIDOX ga kirish</button>
+      <button class="btn btn-danger btn-sm" id="btn-logout" onclick="doLogout()" style="display:none">Chiqish</button>
+      <span id="login-msg" style="font-size:11px;font-family:var(--mono);color:var(--muted)"></span>
+    </div>
+    <div class="pbar"><div class="pfill" id="pb-auth"></div></div>
+  </div>
+
+  <!-- Auth steps guide -->
+  <div class="card">
+    <div class="card-hd">Jarayon tartibi</div>
+    <div class="steps" id="auth-steps">
+      <div class="step" id="s1"><div class="step-num">1</div><div><div class="step-text">E-IMZO kalitlarini yuklash</div><div class="step-sub">certkey / ytks / pfx plugin</div></div></div>
+      <div class="step" id="s2"><div class="step-num">2</div><div><div class="step-text">Kalit tanlash</div><div class="step-sub">Ro'yxatdan sertifikatni bosing</div></div></div>
+      <div class="step" id="s3"><div class="step-num">3</div><div><div class="step-text">authId olish → imzolash</div><div class="step-sub">GET /v1/auth/authId/{serialNumber}</div></div></div>
+      <div class="step" id="s4"><div class="step-num">4</div><div><div class="step-text">Bearer Token → 24 soat</div><div class="step-sub">POST /v1/auth/login</div></div></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-hd">Log</div><div class="log" id="log-auth"><div class="le i">[init] DIDOX Bridge ishga tushdi. Sozlamalar → api-key, user-key kiriting.</div></div></div>
+</div>
+
+<!-- ===================== TAB 2 : DOCS ===================== -->
+<div class="panel" id="p-docs">
+
+  <div class="card">
+    <div class="card-hd">Filtr</div>
+    <div class="grid2">
+      <div class="fg">
+        <label>Hujjat turi</label>
+        <select id="f-type">
+          <option value="">Barchasi</option>
+          <option value="001">001 — Hisob-faktura</option>
+          <option value="002">002 — Faktura (aktsiz)</option>
+          <option value="005">005 — Akt</option>
+          <option value="021">021 — Qaytarish</option>
+          <option value="008">008 — FARM faktura</option>
+          <option value="006">006 — Ishonchnoma</option>
+          <option value="000">000 — Erkin shakl</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Holat</label>
+        <select id="f-status">
+          <option value="">Barchasi</option>
+          <option value="0">0 — Yaratilgan</option>
+          <option value="1">1 — O'z imzosi</option>
+          <option value="2">2 — Sherik kutmoqda</option>
+          <option value="3">3 — Imzolangan ✓</option>
+          <option value="4">4 — Rad etilgan</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Yo'nalish</label>
+        <select id="f-owner">
+          <option value="">Ikkalasi</option>
+          <option value="1">Chiquvchi</option>
+          <option value="0">Kiruvchi</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Sahifa hajmi</label>
+        <select id="f-limit">
+          <option value="20">20 ta</option>
+          <option value="50">50 ta</option>
+          <option value="100">100 ta</option>
+          <option value="200">200 ta</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Sanadan</label>
+        <input type="date" id="f-from">
+      </div>
+      <div class="fg">
+        <label>Sanagacha</label>
+        <input type="date" id="f-to">
+      </div>
+    </div>
+    <div class="row row-wrap">
+      <button class="btn btn-amber" onclick="fetchDocs()">↓ Hujjatlarni olish</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearDocs()">Tozalash</button>
+      <span id="docs-count" style="font-size:11px;color:var(--muted);font-family:var(--mono)"></span>
+    </div>
+    <div class="pbar"><div class="pfill" id="pb-docs"></div></div>
+  </div>
+
+  <div id="docs-result" style="display:none">
+    <div class="card">
+      <div class="card-hd">Natijalar <span id="docs-info"></span></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>ID</th><th>Tur</th><th>Holat</th>
+              <th>Sana</th><th>Sotuvchi</th><th>Xaridor</th><th>Summa</th>
+            </tr>
+          </thead>
+          <tbody id="docs-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">Google Sheets ga yuborish</div>
+      <div class="grid2">
+        <div class="fg">
+          <label>Spreadsheet ID</label>
+          <input type="text" id="sh-id" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms">
+        </div>
+        <div class="fg">
+          <label>Varaq nomi (Sheet)</label>
+          <input type="text" id="sh-name" value="DIDOX_Hujjatlar">
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn btn-teal" onclick="exportSheets()">↑ Google Sheets ga yuborish</button>
+        <span id="sh-msg" style="font-size:11px;color:var(--muted);font-family:var(--mono)"></span>
+      </div>
+      <div class="pbar"><div class="pfill" id="pb-sheets"></div></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-hd">Log</div><div class="log" id="log-docs"><div class="le i">[info] Hujjatlar olinishi uchun avval DIDOX ga kiring (01 tab).</div></div></div>
+</div>
+
+<!-- ===================== TAB 3 : PDF ===================== -->
+<div class="panel" id="p-pdf">
+
+  <div class="info-box ib-amber">
+    ⚠ Google Drive faylini <strong>"Havola orqali ko'rish mumkin (Anyone with link)"</strong> qilib ulashing.
+    Aks holda CORS xatolik bo'ladi. PDF hajmi 10 MB dan oshmasin.
+  </div>
+
+  <!-- Drive PDF -->
+  <div class="card">
+    <div class="card-hd">Google Drive PDF</div>
+    <div class="fg">
+      <label>Drive URL yoki File ID</label>
+      <input type="text" id="drive-url" placeholder="https://drive.google.com/file/d/1ABC.../view  yoki  1ABC...Xyz">
+    </div>
+    <div class="row">
+      <button class="btn btn-ghost" onclick="fetchPdf()">⬇ PDF ni yuklash</button>
+      <span id="pdf-msg" style="font-size:11px;color:var(--muted);font-family:var(--mono)"></span>
+    </div>
+    <div id="pdf-chip" style="display:none">
+      <div class="file-chip">
+        <span class="ic">📄</span>
+        <span class="name" id="pdf-fname"></span>
+        <span class="sz" id="pdf-fsz"></span>
+        <button class="btn btn-xs btn-danger" onclick="clearPdf()">✕</button>
+      </div>
+    </div>
+    <div class="pbar"><div class="pfill" id="pb-pdf-fetch"></div></div>
+  </div>
+
+  <!-- Doc metadata -->
+  <div class="card">
+    <div class="card-hd">Hujjat ma'lumotlari <span>docType: 000 — Erkin shakl</span></div>
+    <div class="grid2">
+      <div class="fg">
+        <label>Hujjat raqami *</label>
+        <input type="text" id="d-no" placeholder="2024-001">
+      </div>
+      <div class="fg">
+        <label>Hujjat sanasi *</label>
+        <input type="date" id="d-date">
+      </div>
+      <div class="fg">
+        <label>Sotuvchi TIN (Seller) *</label>
+        <input type="text" id="d-seller" placeholder="302936161">
+      </div>
+      <div class="fg">
+        <label>Xaridor TIN (Buyer) *</label>
+        <input type="text" id="d-buyer" placeholder="300711863">
+      </div>
+    </div>
+    <div class="fg">
+      <label>Hujjat matni / tavsif</label>
+      <textarea id="d-text" placeholder="Ushbu hujjat PDF ko'rinishida biriktirilgan..."></textarea>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="card">
+    <div class="card-hd">Yuborish</div>
+    <div class="row row-wrap" style="margin-bottom:14px">
+      <button class="btn btn-ghost" onclick="previewPayload()">{ } Payload</button>
+      <button class="btn btn-amber" id="btn-send" onclick="createSign()">⚡ Yaratish &amp; Imzolash &amp; Yuborish</button>
+    </div>
+    <div class="pbar"><div class="pfill" id="pb-send"></div></div>
+    <div id="payload-box" style="display:none;margin-top:16px">
+      <div class="card-hd" style="margin-bottom:8px">JSON Payload</div>
+      <div class="payload-pre" id="payload-pre"></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-hd">Log</div><div class="log" id="log-pdf"><div class="le i">[info] Drive PDF ni yuklang, ma'lumotlarni to'ldiring va yuborishni boshlang.</div></div></div>
+</div>
+
+</div><!-- /wrap -->
+
+<!-- ===================== SETTINGS DRAWER ===================== -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-hd">
+    <h2>⚙ Sozlamalar</h2>
+    <button class="btn btn-ghost btn-sm" onclick="closeDrawer()">✕</button>
+  </div>
+
+  <div class="drawer-section">
+    <h3>DIDOX API</h3>
+    <div class="fg">
+      <label>Base URL</label>
+      <input type="text" id="s-url" value="https://devapi.goodsign.biz/">
+    </div>
+    <div class="fg">
+      <label>api-key</label>
+      <input type="text" id="s-api" placeholder="01890b96-a513-4557-8a7e-f48da16221f1">
+    </div>
+    <div class="fg">
+      <label>user-key</label>
+      <input type="text" id="s-user" placeholder="01890b96-a513-4557-8a7e-f48da16221f1">
+    </div>
+  </div>
+
+  <div class="drawer-section">
+    <h3>Google Apps Script (Sheets yozish uchun)</h3>
+    <div class="info-box ib-teal" style="font-size:11px">
+      Google Sheets ga yozish uchun Apps Script Web App kerak.
+      <strong>script.google.com</strong> → Yangi loyiha → quyidagi kodni joylashtiring → Deploy → Web App (Execute as: Me, Access: Anyone)
+    </div>
+    <div class="code-snippet">function doPost(e) {
+  try {
+    var d = JSON.parse(e.postData.contents);
+    var ss = SpreadsheetApp.openById(d.spreadsheetId);
+    var sh = ss.getSheetByName(d.sheetName)
+           || ss.insertSheet(d.sheetName);
+    if (sh.getLastRow() === 0) sh.appendRow(d.headers);
+    d.rows.forEach(function(r){ sh.appendRow(r); });
+    return ContentService
+      .createTextOutput(JSON.stringify({ok:true,n:d.rows.length}))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ok:false,e:err.message}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}</div>
+    <div class="fg">
+      <label>Apps Script Web App URL</label>
+      <input type="text" id="s-gas" placeholder="https://script.google.com/macros/s/AKfycbx.../exec">
+    </div>
+  </div>
+
+  <div class="drawer-section">
+    <h3>CORS Proxy (ixtiyoriy)</h3>
+    <div class="info-box ib-amber" style="font-size:11px">
+      Agar DIDOX API yoki Drive CORS xatolik bersa proxy URL kiriting.<br>
+      Masalan: <code>https://corsproxy.io/?url=</code>
+    </div>
+    <div class="fg">
+      <label>CORS Proxy prefiksi</label>
+      <input type="text" id="s-proxy" placeholder="https://corsproxy.io/?url=">
+    </div>
+  </div>
+
+  <div class="row">
+    <button class="btn btn-amber" onclick="saveSettings()">💾 Saqlash</button>
+    <button class="btn btn-danger btn-sm" onclick="resetAll()">Hammani o'chirish</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  STATE
+// ============================================================
+const ST = {
+  token: null,
+  tokenExpiry: null,
+  keyId: null,
+  selectedCert: null,
+  docs: [],
+  pdfB64: null,
+  pdfName: null,
+};
+
+// ============================================================
+//  SETTINGS
+// ============================================================
+const SKEY = 'didox-bridge-v1';
+
+function gs() {
+  const d = JSON.parse(localStorage.getItem(SKEY) || '{}');
+  return {
+    url:   d.url   || 'https://devapi.goodsign.biz/',
+    api:   d.api   || '',
+    user:  d.user  || '',
+    gas:   d.gas   || '',
+    proxy: d.proxy || '',
+    shId:  d.shId  || '',
+  };
+}
+
+function loadSettingsUI() {
+  const s = gs();
+  document.getElementById('s-url').value   = s.url;
+  document.getElementById('s-api').value   = s.api;
+  document.getElementById('s-user').value  = s.user;
+  document.getElementById('s-gas').value   = s.gas;
+  document.getElementById('s-proxy').value = s.proxy;
+  const shEl = document.getElementById('sh-id');
+  if (shEl && s.shId) shEl.value = s.shId;
+}
+
+function saveSettings() {
+  const d = {
+    url:   document.getElementById('s-url').value.trim(),
+    api:   document.getElementById('s-api').value.trim(),
+    user:  document.getElementById('s-user').value.trim(),
+    gas:   document.getElementById('s-gas').value.trim(),
+    proxy: document.getElementById('s-proxy').value.trim(),
+    shId:  (document.getElementById('sh-id') || {}).value || '',
+  };
+  localStorage.setItem(SKEY, JSON.stringify(d));
+  log('auth', '✓ Sozlamalar saqlandi', 's');
+  checkDots();
+  closeDrawer();
+}
+
+function resetAll() {
+  if (confirm("Barcha sozlamalar o'chirilib, sahifa yangilanadi. Davom etasizmi?")) {
+    localStorage.clear(); location.reload();
+  }
+}
+
+// ============================================================
+//  TABS / DRAWER
+// ============================================================
+function goTab(el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('p-' + el.dataset.p).classList.add('on');
+}
+
+function openDrawer()  { loadSettingsUI(); document.getElementById('drawer').classList.add('open'); document.getElementById('overlay').style.display = 'block'; }
+function closeDrawer() { document.getElementById('drawer').classList.remove('open'); document.getElementById('overlay').style.display = 'none'; }
+
+// ============================================================
+//  DOTS
+// ============================================================
+function setDot(id, state) { // state: '' | 'ok' | 'err' | 'warn'
+  const el = document.getElementById('d-' + id);
+  el.className = 'dot' + (state ? ' ' + state : '');
+}
+function checkDots() {
+  const s = gs();
+  setDot('sheets', s.gas ? 'ok' : '');
+  if (ST.token) setDot('didox', 'ok');
+}
+
+// ============================================================
+//  LOG
+// ============================================================
+function log(panel, msg, type='i') {
+  const el = document.getElementById('log-' + panel);
+  if (!el) return;
+  const ts = new Date().toLocaleTimeString('uz');
+  const d = document.createElement('div');
+  d.className = 'le ' + type;
+  d.textContent = `[${ts}] ${msg}`;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+function pb(id, pct) {
+  const el = document.getElementById(id);
+  if (el) el.style.width = pct + '%';
+}
+
+// ============================================================
+//  E-IMZO  (WebSocket CAPIWS)
+// ============================================================
+const eimzo = (() => {
+  let ws = null, mid = 0, pending = {};
+  const PORTS = [64646, 64342];
+
+  function _connect(url) {
+    return new Promise((res, rej) => {
+      const sock = new WebSocket(url);
+      const t = setTimeout(() => { sock.close(); rej(new Error('timeout')); }, 3500);
+      sock.onopen  = () => { clearTimeout(t); ws = sock; sock.onmessage = _msg; res(); };
+      sock.onerror = () => { clearTimeout(t); rej(new Error('conn error')); };
+      sock.onclose = () => { ws = null; setDot('eimzo', ''); };
+    });
+  }
+
+  function _msg(ev) {
+    try {
+      const d = JSON.parse(ev.data);
+      const id = d.id || '__';
+      const cb = pending[id];
+      if (!cb) return;
+      delete pending[id];
+      if (d.success === false || (d.reason && !d.keyId && !d.certificates && !d.pkcs7_64)) {
+        cb.rej(new Error(d.reason || d.message || 'Xatolik'));
+      } else {
+        cb.res(d);
+      }
+    } catch {}
+  }
+
+  async function connect() {
+    if (ws && ws.readyState === WebSocket.OPEN) return true;
+    for (const port of PORTS) {
+      try {
+        await _connect(`${port === 64646 ? 'wss' : 'ws'}://127.0.0.1:${port}/service/cryptapi`);
+        log('auth', `✓ E-IMZO ulandi (port ${port})`, 's');
+        setDot('eimzo', 'ok');
+        document.getElementById('eimzo-msg').textContent = `Ulandi — port ${port}`;
+        return true;
+      } catch { continue; }
+    }
+    log('auth', '✗ E-IMZO ulanmadi. Plugin ishlaymayaptimi?', 'e');
+    setDot('eimzo', 'err');
+    document.getElementById('eimzo-msg').textContent = 'Plugin topilmadi';
+    document.getElementById('eimzo-hint').innerHTML = '<a href="https://e-imzo.uz" target="_blank" style="color:var(--amber)">e-imzo.uz dan o\'rnating ↗</a>';
+    return false;
+  }
+
+  function call(plugin, name, args = []) {
+    return new Promise((res, rej) => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) { rej(new Error('E-IMZO WebSocket ulanmagan')); return; }
+      const id = String(++mid);
+      pending[id] = { res, rej };
+      setTimeout(() => { if (pending[id]) { delete pending[id]; rej(new Error('E-IMZO timeout (15s)')); } }, 15000);
+      ws.send(JSON.stringify({ id, plugin, name, arguments: args }));
+    });
+  }
+
+  async function loadCerts() {
+    document.getElementById('btn-load-certs').disabled = true;
+    log('auth', '→ E-IMZO ga ulanmoqda...', 'i');
+    const ok = await connect();
+    if (!ok) { document.getElementById('btn-load-certs').disabled = false; return; }
+
+    log('auth', '→ Sertifikatlar yuklanmoqda...', 'i');
+    let certs = [];
+
+    for (const plug of ['pfx', 'ytks', 'certkey']) {
+      try {
+        const r = await call(plug, 'list_all_certificates');
+        if (r.certificates?.length) {
+          certs = r.certificates.map(c => ({ ...c, _plug: plug }));
+          log('auth', `✓ ${certs.length} ta sertifikat (${plug})`, 's');
+          break;
+        }
+      } catch {}
+    }
+
+    // Fallback: list disks → list_certificates per disk
+    if (!certs.length) {
+      for (const plug of ['pfx', 'ytks']) {
+        try {
+          const dr = await call(plug, 'list_disks');
+          for (const disk of (dr.disks || [])) {
+            const cr = await call(plug, 'list_certificates', [disk]);
+            (cr.certificates || []).forEach(c => certs.push({ ...c, _plug: plug, _disk: disk }));
+          }
+        } catch {}
+      }
+    }
+
+    renderKeys(certs);
+    markStep('s1', 'done');
+    document.getElementById('btn-load-certs').disabled = false;
+  }
+
+  async function loadKey(cert) {
+    const plug = cert._plug || 'pfx';
+    log('auth', `→ Kalit yuklanmoqda: ${cert.CN || cert.commonName || cert.serialNumber || '?'}`, 'i');
+    let r;
+    if (plug === 'pfx') {
+      r = await call('pfx', 'load_key', [cert._disk || '', cert.path || '', cert.name || '', cert.alias || '']);
+    } else if (plug === 'ytks') {
+      r = await call('ytks', 'load_key', [cert._disk || '', cert.path || '', cert.name || '', cert.alias || '', cert.serialNumber || '']);
+    } else {
+      r = await call('certkey', 'load_key', [cert._disk || '', cert.path || 'DSKEYS', cert.name || '', cert.serialNumber || '']);
+    }
+    const kid = r.keyId || r.id;
+    log('auth', `✓ keyId: ${kid}`, 's');
+    return kid;
+  }
+
+  async function sign(b64, keyId) {
+    log('auth', '→ Imzolash (pkcs7.create_pkcs7)...', 'i');
+    const r = await call('pkcs7', 'create_pkcs7', [b64, keyId, 'no']);
+    log('auth', '✓ PKCS7 imzo yaratildi', 's');
+    return r.pkcs7_64;
+  }
+
+  return { connect, call, loadCerts, loadKey, sign };
+})();
+
+function renderKeys(certs) {
+  const el = document.getElementById('key-list');
+  if (!certs?.length) {
+    el.innerHTML = '<div class="empty" style="padding:20px">Sertifikat topilmadi. USB kalit ulangan?</div>';
+    return;
+  }
+  el.innerHTML = '';
+  certs.forEach((c, i) => {
+    const d = document.createElement('div');
+    d.className = 'key-item';
+    const cn = c.CN || c.commonName || c.subjectName || 'Sertifikat #' + (i+1);
+    const sn = c.serialNumber || '—';
+    const exp = c.validTo || c.notAfter || '';
+    d.innerHTML = `
+      <div>
+        <div class="key-cn">${cn}</div>
+        <div class="key-meta">SN: ${sn}${exp ? ' · ' + exp : ''}</div>
+      </div>
+      <span class="key-tag">${(c._plug || '').toUpperCase() || 'KEY'}</span>
+    `;
+    d.onclick = () => {
+      document.querySelectorAll('.key-item').forEach(k => k.classList.remove('sel'));
+      d.classList.add('sel');
+      ST.selectedCert = c;
+      ST.keyId = null;
+      log('auth', `✓ Tanlandi: ${cn}`, 's');
+      markStep('s2', 'done');
+    };
+    el.appendChild(d);
+  });
+}
+
+function markStep(id, cls) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'step ' + cls;
+}
+
+// ============================================================
+//  DIDOX API
+// ============================================================
+async function dreq(path, opts = {}) {
+  const s = gs();
+  if (!s.api || !s.user) throw new Error('api-key va user-key Sozlamalarda kiriting!');
+  const url = (s.proxy || '') + s.url.replace(/\/$/, '') + path;
+  const headers = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'api-key': s.api,
+    'user-key': s.user,
+  };
+  if (ST.token) headers['Authorization'] = 'Bearer ' + ST.token;
+  const res = await fetch(url, { ...opts, headers: { ...headers, ...(opts.headers || {}) } });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}: ${t.slice(0, 200)}`);
+  }
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) return res.json();
+  return res.text();
+}
+
+// ============================================================
+//  AUTH
+// ============================================================
+async function doLogin() {
+  const s = gs();
+  if (!s.api || !s.user) { log('auth', '✗ Sozlamalarda api-key va user-key kiriting!', 'e'); openDrawer(); return; }
+  if (!ST.selectedCert) { log('auth', '✗ Avval kalit tanlang!', 'e'); return; }
+
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true;
+
+  try {
+    pb('pb-auth', 15);
+
+    // Load key
+    if (!ST.keyId) ST.keyId = await eimzo.loadKey(ST.selectedCert);
+    pb('pb-auth', 30);
+
+    const serial = ST.selectedCert.serialNumber || '';
+    log('auth', `→ GET /v1/auth/authId/${serial}`, 'i');
+
+    const ar = await dreq(`/v1/auth/authId/${serial}`);
+    const authId = ar?.authId || ar;
+    log('auth', `✓ authId: ${authId}`, 's');
+    pb('pb-auth', 50);
+    markStep('s3', 'active');
+
+    // Sign
+    const payloadStr = JSON.stringify({ authId: String(authId) });
+    const payloadB64 = btoa(unescape(encodeURIComponent(payloadStr)));
+    const pkcs7 = await eimzo.sign(payloadB64, ST.keyId);
+    pb('pb-auth', 72);
+    markStep('s3', 'done');
+
+    // Login
+    log('auth', '→ POST /v1/auth/login', 'i');
+    const lr = await dreq('/v1/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ serialNumber: serial, pkcs7 }),
+    });
+
+    ST.token = lr?.token || (typeof lr === 'string' ? lr : null);
+    if (!ST.token) throw new Error('Token kelmadi: ' + JSON.stringify(lr));
+
+    ST.tokenExpiry = new Date(Date.now() + 24 * 3600 * 1000);
+    document.getElementById('tok-val').textContent = ST.token.slice(0, 24) + '…';
+    document.getElementById('tok-exp').textContent = '✓ ' + ST.tokenExpiry.toLocaleString('uz');
+    document.getElementById('token-wrap').style.display = 'block';
+    document.getElementById('btn-logout').style.display = 'inline-flex';
+    btn.textContent = '↺ Tokenni yangilash';
+
+    setDot('didox', 'ok');
+    pb('pb-auth', 100);
+    markStep('s4', 'done');
+    log('auth', '✓ Muvaffaqiyatli ulandi! Token 24 soat amal qiladi.', 's');
+    setTimeout(() => pb('pb-auth', 0), 2000);
+
+  } catch(e) {
+    log('auth', '✗ ' + e.message, 'e');
+    setDot('didox', 'err');
+    pb('pb-auth', 0);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function doLogout() {
+  ST.token = null; ST.keyId = null;
+  document.getElementById('token-wrap').style.display = 'none';
+  document.getElementById('btn-logout').style.display = 'none';
+  document.getElementById('btn-login').textContent = '⚡ DIDOX ga kirish';
+  setDot('didox', '');
+  ['s3','s4'].forEach(id => markStep(id, ''));
+  log('auth', '→ Chiqildi', 'w');
+}
+
+// ============================================================
+//  DOCUMENTS
+// ============================================================
+async function fetchDocs() {
+  if (!ST.token) { log('docs', '✗ Avval 01 tab da DIDOX ga kiring!', 'e'); return; }
+
+  const p = new URLSearchParams();
+  const v = (id) => document.getElementById(id).value;
+  if (v('f-type'))   p.set('doctype',  v('f-type'));
+  if (v('f-status')) p.set('status',   v('f-status'));
+  if (v('f-owner'))  p.set('owner',    v('f-owner'));
+  if (v('f-limit'))  p.set('limit',    v('f-limit'));
+  if (v('f-from'))   p.set('dateFrom', v('f-from'));
+  if (v('f-to'))     p.set('dateTo',   v('f-to'));
+  p.set('page', '1');
+
+  const qs = p.toString();
+  log('docs', `→ GET /v1/documents?${qs}`, 'i');
+  pb('pb-docs', 30);
+
+  try {
+    const data = await dreq(`/v1/documents?${qs}`);
+    const docs = Array.isArray(data) ? data : (data?.documents || data?.items || data?.content || []);
+    ST.docs = docs;
+    renderDocs(docs);
+    document.getElementById('docs-count').textContent = `${docs.length} ta hujjat topildi`;
+    log('docs', `✓ ${docs.length} ta hujjat olindi`, 's');
+    pb('pb-docs', 100);
+    setTimeout(() => pb('pb-docs', 0), 1500);
+  } catch(e) {
+    log('docs', '✗ ' + e.message, 'e');
+    pb('pb-docs', 0);
+  }
+}
+
+function clearDocs() {
+  ST.docs = [];
+  document.getElementById('docs-result').style.display = 'none';
+  document.getElementById('docs-count').textContent = '';
+}
+
+const STATUS_MAP = {
+  0:'b0 Yaratilgan', 1:'b1 Imzolangan(o\'z)', 2:'b2 Kutmoqda',
+  3:'b3 Imzolangan', 4:'b4 Rad etilgan', 5:'b5 O\'chirilgan',
+};
+
+function renderDocs(docs) {
+  const res = document.getElementById('docs-result');
+  const tb  = document.getElementById('docs-tbody');
+  document.getElementById('docs-info').textContent = docs.length + ' ta';
+
+  if (!docs.length) {
+    tb.innerHTML = '<tr><td colspan="8" class="empty">Hujjat topilmadi</td></tr>';
+    res.style.display = 'block';
+    return;
+  }
+
+  tb.innerHTML = docs.map((d, i) => {
+    const st = String(d.status ?? '');
+    const [cls, label] = (STATUS_MAP[st] || 'b0 ' + st).split(' ');
+    const sum = d.totalSum ?? d.amount;
+    const sumFmt = sum != null ? Number(sum).toLocaleString('ru') + " so'm" : '—';
+    const date = (d.createdDate || d.docDate || '').toString().split('T')[0] || '—';
+    return `<tr>
+      <td class="muted">${i+1}</td>
+      <td class="mono amber" style="font-size:11px">${d.id || d.docId || '—'}</td>
+      <td class="mono">${d.docType || d.type || '—'}</td>
+      <td><span class="badge ${cls}">${label}</span></td>
+      <td style="font-size:11px">${date}</td>
+      <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.sellerName || d.seller || '—'}</td>
+      <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.buyerName || d.buyer || '—'}</td>
+      <td class="mono" style="font-size:11px">${sumFmt}</td>
+    </tr>`;
+  }).join('');
+
+  res.style.display = 'block';
+}
+
+// ============================================================
+//  GOOGLE SHEETS EXPORT
+// ============================================================
+async function exportSheets() {
+  if (!ST.docs.length) { log('docs', '✗ Avval hujjatlarni oling', 'e'); return; }
+  const s = gs();
+  if (!s.gas) { log('docs', '✗ Apps Script URL Sozlamalarda kiriting!', 'e'); openDrawer(); return; }
+
+  const shId   = document.getElementById('sh-id').value.trim();
+  const shName = document.getElementById('sh-name').value.trim() || 'DIDOX_Hujjatlar';
+  if (!shId) { log('docs', '✗ Spreadsheet ID kiriting!', 'e'); return; }
+
+  // Persist shId
+  const cfg = JSON.parse(localStorage.getItem(SKEY) || '{}');
+  cfg.shId = shId;
+  localStorage.setItem(SKEY, JSON.stringify(cfg));
+
+  const HEADERS = ['#','ID','Tur','Holat','Sana','Sotuvchi TIN','Sotuvchi','Xaridor TIN','Xaridor','Summa','QQS Summasi'];
+  const rows = ST.docs.map((d, i) => [
+    i + 1,
+    String(d.id || d.docId || ''),
+    String(d.docType || d.type || ''),
+    String(d.status ?? ''),
+    (d.createdDate || d.docDate || '').toString().split('T')[0] || '',
+    String(d.sellerTin || ''),
+    String(d.sellerName || d.seller || ''),
+    String(d.buyerTin || ''),
+    String(d.buyerName || d.buyer || ''),
+    Number(d.totalSum ?? d.amount ?? 0),
+    Number(d.vatSum ?? 0),
+  ]);
+
+  log('docs', `→ ${rows.length} qator Google Sheets ga yuborilyapti...`, 'i');
+  pb('pb-sheets', 40);
+
+  try {
+    // no-cors needed for file:// origin; response unreadable but data is sent
+    await fetch(s.gas, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spreadsheetId: shId, sheetName, headers: HEADERS, rows }),
+    });
+    pb('pb-sheets', 100);
+    document.getElementById('sh-msg').textContent = `✓ ${rows.length} qator yuborildi`;
+    document.getElementById('sh-msg').style.color = 'var(--green)';
+    setDot('sheets', 'ok');
+    log('docs', `✓ ${rows.length} qator yuborildi → "${shName}" varag'i`, 's');
+    log('docs', `  Spreadsheet: https://docs.google.com/spreadsheets/d/${shId}`, 'i');
+    setTimeout(() => pb('pb-sheets', 0), 2500);
+  } catch(e) {
+    log('docs', '✗ ' + e.message, 'e');
+    pb('pb-sheets', 0);
+  }
+}
+
+// ============================================================
+//  PDF FETCH
+// ============================================================
+function extractFileId(url) {
+  const m1 = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (m1) return m1[1];
+  const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m2) return m2[1];
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(url.trim())) return url.trim();
+  return null;
+}
+
+async function fetchPdf() {
+  const raw = document.getElementById('drive-url').value.trim();
+  if (!raw) { log('pdf', '✗ Drive URL kiriting!', 'e'); return; }
+
+  const fid = extractFileId(raw);
+  if (!fid) { log('pdf', '✗ File ID ajratilmadi. URL to\'g\'ri ekanini tekshiring.', 'e'); return; }
+
+  const s = gs();
+  const dlUrl = `https://drive.google.com/uc?export=download&id=${fid}`;
+  const proxyUrl = (s.proxy || '') + dlUrl;
+
+  log('pdf', `→ Drive PDF yuklanmoqda: fileId=${fid}`, 'i');
+  document.getElementById('pdf-msg').textContent = 'Yuklanmoqda...';
+  pb('pb-pdf-fetch', 20);
+
+  try {
+    const res = await fetch(proxyUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status} — fayl public emasmi?`);
+
+    const blob = await res.blob();
+    pb('pb-pdf-fetch', 70);
+
+    if (!blob.type.includes('pdf') && blob.size < 1000) {
+      throw new Error('PDF emas yoki hajm juda kichik. Google Drive ham confirm page qaytarishi mumkin — faylni public qiling.');
+    }
+
+    const kb = (blob.size / 1024).toFixed(1);
+    const reader = new FileReader();
+    reader.onload = () => {
+      ST.pdfB64 = reader.result.split(',')[1];
+      ST.pdfName = `drive_${fid}.pdf`;
+      document.getElementById('pdf-fname').textContent = ST.pdfName;
+      document.getElementById('pdf-fsz').textContent   = kb + ' KB';
+      document.getElementById('pdf-chip').style.display = 'block';
+      document.getElementById('pdf-msg').textContent   = '';
+      pb('pb-pdf-fetch', 100);
+      log('pdf', `✓ PDF yuklandi: ${kb} KB`, 's');
+      setTimeout(() => pb('pb-pdf-fetch', 0), 1500);
+    };
+    reader.onerror = () => { throw new Error('Fayl o\'qishda xatolik'); };
+    reader.readAsDataURL(blob);
+
+  } catch(e) {
+    log('pdf', '✗ ' + e.message, 'e');
+    document.getElementById('pdf-msg').textContent = '✗ Xatolik';
+    pb('pb-pdf-fetch', 0);
+  }
+}
+
+function clearPdf() {
+  ST.pdfB64 = null; ST.pdfName = null;
+  document.getElementById('pdf-chip').style.display = 'none';
+  document.getElementById('drive-url').value = '';
+  document.getElementById('pdf-msg').textContent = '';
+}
+
+// ============================================================
+//  CREATE & SIGN DOCUMENT (type 000)
+// ============================================================
+function buildPayload() {
+  const g = id => document.getElementById(id).value.trim();
+  return {
+    ContractDoc: { ContractNo: g('d-no'), ContractDate: g('d-date') },
+    SellerTin:   g('d-seller'),
+    BuyerTin:    g('d-buyer'),
+    DocText:     g('d-text') || 'PDF hujjat biriktirildi',
+    ...(ST.pdfB64 ? {
+      Attachment: {
+        FileName: ST.pdfName || 'document.pdf',
+        FileData: ST.pdfB64,
+        FileType: 'application/pdf',
+      }
+    } : {}),
+  };
+}
+
+function previewPayload() {
+  const p = buildPayload();
+  const safe = { ...p };
+  if (safe.Attachment) safe.Attachment = { ...safe.Attachment, FileData: `[BASE64 — ${ST.pdfB64?.length || 0} chars]` };
+  document.getElementById('payload-pre').textContent = JSON.stringify(safe, null, 2);
+  document.getElementById('payload-box').style.display = 'block';
+}
+
+async function createSign() {
+  if (!ST.token) { log('pdf', '✗ Avval 01 tab da DIDOX ga kiring!', 'e'); return; }
+
+  const g = id => document.getElementById(id).value.trim();
+  if (!g('d-no') || !g('d-date') || !g('d-buyer')) {
+    log('pdf', '✗ Hujjat raqami, sanasi va Xaridor TIN majburiy!', 'e'); return;
+  }
+
+  const btn = document.getElementById('btn-send');
+  btn.disabled = true;
+
+  try {
+    pb('pb-send', 10);
+
+    // Load key if needed
+    if (!ST.keyId) {
+      if (!ST.selectedCert) { log('pdf', '✗ 01 tab da kalit tanlang!', 'e'); return; }
+      ST.keyId = await eimzo.loadKey(ST.selectedCert);
+    }
+    pb('pb-send', 20);
+
+    // 1. Create document
+    const payload = buildPayload();
+    log('pdf', '→ Hujjat yaratilmoqda (POST /v1/documents/000/create)...', 'i');
+    const cr = await dreq('/v1/documents/000/create', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const docId = cr?.id || cr?.docId || (typeof cr === 'string' ? cr : null);
+    if (!docId) throw new Error('Hujjat ID kelmadi: ' + JSON.stringify(cr));
+    log('pdf', `✓ Hujjat yaratildi. ID: ${docId}`, 's');
+    pb('pb-send', 38);
+
+    // 2. Get toSign data
+    log('pdf', `→ GET /v1/documents/${docId}/tosign?action=accept`, 'i');
+    const toSign = await dreq(`/v1/documents/${docId}/tosign?action=accept`);
+    const raw = typeof toSign === 'string' ? toSign : JSON.stringify(toSign);
+    const b64  = btoa(unescape(encodeURIComponent(raw)));
+    pb('pb-send', 55);
+
+    // 3. Sign with E-IMZO
+    const sig = await eimzo.sign(b64, ST.keyId);
+    pb('pb-send', 75);
+
+    // 4. Submit signature
+    log('pdf', `→ POST /v1/documents/${docId}/sign`, 'i');
+    await dreq(`/v1/documents/${docId}/sign`, {
+      method: 'POST',
+      body: JSON.stringify({ signature: sig }),
+    });
+
+    pb('pb-send', 100);
+    log('pdf', `✓✓ Muvaffaqiyat! Hujjat yaratildi va imzolandi.`, 's');
+    log('pdf', `   Document ID: ${docId}`, 'i');
+    log('pdf', `   DIDOX kabineti: https://didox.uz → Hujjatlar`, 'i');
+    setTimeout(() => pb('pb-send', 0), 3000);
+
+  } catch(e) {
+    log('pdf', '✗ ' + e.message, 'e');
+    pb('pb-send', 0);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+window.addEventListener('load', () => {
+  loadSettingsUI();
+  checkDots();
+
+  const today = new Date().toISOString().split('T')[0];
+  const m30   = new Date(Date.now() - 30*864e5).toISOString().split('T')[0];
+
+  document.getElementById('d-date').value  = today;
+  document.getElementById('f-to').value    = today;
+  document.getElementById('f-from').value  = m30;
+
+  const s = gs();
+  if (s.shId) document.getElementById('sh-id').value = s.shId;
+  if (!s.api || !s.user) {
+    setTimeout(() => log('auth', '⚠ Sozlamalar → api-key va user-key kiriting!', 'w'), 600);
+  }
+});
+</script>
+</body>
+</html>
