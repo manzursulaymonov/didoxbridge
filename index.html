@@ -716,18 +716,51 @@ function pb(id, pct) {
 
 // ============================================================
 //  E-IMZO  (WebSocket CAPIWS)
+//  Urinish tartibi: ws:64646 → wss:64646 → ws:64342 → ws:64545
 // ============================================================
 const eimzo = (() => {
   let ws = null, mid = 0, pending = {};
-  const PORTS = [64646, 64342];
+
+  // To'g'ri tartib: avval ws://, keyin wss://
+  // E-IMZO v3-v5 odatda ws://127.0.0.1:64646 da ishlaydi
+  const ENDPOINTS = [
+    'ws://127.0.0.1:64646/service/cryptapi',
+    'wss://127.0.0.1:64646/service/cryptapi',
+    'ws://127.0.0.1:64342/service/cryptapi',
+    'ws://127.0.0.1:64545/service/cryptapi',
+  ];
 
   function _connect(url) {
     return new Promise((res, rej) => {
-      const sock = new WebSocket(url);
-      const t = setTimeout(() => { sock.close(); rej(new Error('timeout')); }, 3500);
-      sock.onopen  = () => { clearTimeout(t); ws = sock; sock.onmessage = _msg; res(); };
-      sock.onerror = () => { clearTimeout(t); rej(new Error('conn error')); };
-      sock.onclose = () => { ws = null; setDot('eimzo', ''); };
+      let settled = false;
+      let sock;
+      try { sock = new WebSocket(url); }
+      catch(e) { rej(e); return; }
+
+      const t = setTimeout(() => {
+        if (settled) return; settled = true;
+        try { sock.close(); } catch{}
+        rej(new Error('timeout'));
+      }, 4000);
+
+      sock.onopen = () => {
+        if (settled) return; settled = true;
+        clearTimeout(t);
+        ws = sock;
+        sock.onmessage = _msg;
+        sock.onclose = () => { ws = null; setDot('eimzo', 'warn'); };
+        res(url);
+      };
+      sock.onerror = () => {
+        if (settled) return; settled = true;
+        clearTimeout(t);
+        try { sock.close(); } catch{}
+        rej(new Error('connect failed'));
+      };
+      sock.onclose = (ev) => {
+        if (!settled) { settled = true; clearTimeout(t); rej(new Error('closed: ' + ev.code)); }
+        ws = null; setDot('eimzo', '');
+      };
     });
   }
 
@@ -738,29 +771,43 @@ const eimzo = (() => {
       const cb = pending[id];
       if (!cb) return;
       delete pending[id];
-      if (d.success === false || (d.reason && !d.keyId && !d.certificates && !d.pkcs7_64)) {
-        cb.rej(new Error(d.reason || d.message || 'Xatolik'));
+      // E-IMZO xatolik belgilari
+      if (d.success === false) {
+        cb.rej(new Error(d.reason || d.message || 'E-IMZO xatolik'));
+      } else if (d.reason && d.reason !== 'ok' && !d.keyId && !d.certificates && !d.pkcs7_64 && !d.disks) {
+        cb.rej(new Error(d.reason));
       } else {
         cb.res(d);
       }
-    } catch {}
+    } catch(e) { console.warn('E-IMZO msg parse:', e); }
   }
 
   async function connect() {
     if (ws && ws.readyState === WebSocket.OPEN) return true;
-    for (const port of PORTS) {
+    ws = null;
+
+    for (const url of ENDPOINTS) {
+      log('auth', `   Urinilmoqda: ${url}`, 'i');
       try {
-        await _connect(`${port === 64646 ? 'wss' : 'ws'}://127.0.0.1:${port}/service/cryptapi`);
-        log('auth', `✓ E-IMZO ulandi (port ${port})`, 's');
+        const connected = await _connect(url);
+        log('auth', `✓ E-IMZO ulandi → ${connected}`, 's');
         setDot('eimzo', 'ok');
-        document.getElementById('eimzo-msg').textContent = `Ulandi — port ${port}`;
+        document.getElementById('eimzo-msg').textContent = `Ulandi ✓`;
+        document.getElementById('eimzo-hint').textContent = url;
         return true;
-      } catch { continue; }
+      } catch(e) {
+        log('auth', `   ✗ ${url.split('//')[1].split('/')[0]} — ${e.message}`, 'w');
+      }
     }
-    log('auth', '✗ E-IMZO ulanmadi. Plugin ishlaymayaptimi?', 'e');
+
+    log('auth', '✗ E-IMZO hech bir portda topilmadi!', 'e');
+    log('auth', '  1) E-IMZO ilovasi ishlaymayaptimi? (System tray da ko\'ring)', 'w');
+    log('auth', '  2) https://e-imzo.uz dan yuklab o\'rnating', 'w');
+    log('auth', '  3) O\'rnatilgan bo\'lsa ilovani qayta ishga tushiring', 'w');
     setDot('eimzo', 'err');
-    document.getElementById('eimzo-msg').textContent = 'Plugin topilmadi';
-    document.getElementById('eimzo-hint').innerHTML = '<a href="https://e-imzo.uz" target="_blank" style="color:var(--amber)">e-imzo.uz dan o\'rnating ↗</a>';
+    document.getElementById('eimzo-msg').textContent = 'Ulanmadi';
+    document.getElementById('eimzo-hint').innerHTML =
+      '<a href="https://e-imzo.uz" target="_blank" style="color:var(--amber)">↗ e-imzo.uz dan yuklab o\'rnating</a>';
     return false;
   }
 
