@@ -315,9 +315,18 @@ tr:hover td{background:rgba(255,255,255,0.015)}
   <!-- E-IMZO -->
   <div class="card">
     <div class="card-hd">E-IMZO — Kalit tanlash <span id="eimzo-hint"></span></div>
-    <div class="row" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <button class="btn btn-ghost" id="btn-load-certs" onclick="eimzo.loadCerts()">↺ Kalitlarni skanerlash</button>
+    <div class="row" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <button class="btn btn-amber" id="btn-dskeys" onclick="scanDSKEYS()">&#128273; C:\DSKEYS Skanerlash</button>
+      <button class="btn btn-ghost btn-sm" id="btn-load-certs" onclick="eimzo.loadCerts()">&#8635; To'liq skanerlash</button>
       <span id="eimzo-msg" style="font-size:11px;font-family:var(--mono);color:var(--muted)">Ulanish tekshirilmoqda...</span>
+    </div>
+    <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:10px;font-family:var(--mono);color:var(--muted)">Disk:</span>
+      <input type="text" id="quick-disk" value="C:" style="width:50px;padding:4px 8px;font-size:12px">
+      <span style="font-size:10px;font-family:var(--mono);color:var(--muted)">Papka:</span>
+      <input type="text" id="quick-path" value="DSKEYS" style="width:80px;padding:4px 8px;font-size:12px">
+      <button class="btn btn-ghost btn-sm" onclick="scanCustomPath()">Skanerlash</button>
+      <button class="btn btn-ghost btn-sm" onclick="showRawDebug()">Debug</button>
     </div>
     <!-- Tanlangan kalit -->
     <div id="sel-cert-box" style="display:none;margin-bottom:14px">
@@ -986,6 +995,122 @@ const eimzo = (() => {
 
   return { connect, call, loadCerts, loadKey, sign };
 })();
+
+// ============================================================
+//  DSKEYS VA CUSTOM PATH SKANERLASH
+// ============================================================
+
+// C:\DSKEYS ni to'g'ridan-to'g'ri skanerlash
+async function scanDSKEYS() {
+  const btn = document.getElementById('btn-dskeys');
+  btn.disabled = true;
+  log('auth', '→ C:\\DSKEYS skanerlanmoqda...', 'i');
+
+  const ok = await eimzo.connect();
+  if (!ok) { btn.disabled = false; return; }
+
+  // certkey plugin bilan C: DSKEYS
+  await _scanPath('certkey', 'C:', 'DSKEYS');
+
+  btn.disabled = false;
+}
+
+// Custom disk/path skanerlash
+async function scanCustomPath() {
+  const disk = document.getElementById('quick-disk').value.trim() || 'C:';
+  const path = document.getElementById('quick-path').value.trim();
+  log('auth', `→ ${disk}\\${path} skanerlanmoqda...`, 'i');
+
+  const ok = await eimzo.connect();
+  if (!ok) return;
+
+  let found = false;
+  for (const plug of ['certkey', 'pfx', 'ytks']) {
+    const certs = await _scanPath(plug, disk, path);
+    if (certs && certs.length) { found = true; break; }
+  }
+  if (!found) log('auth', `⚠ ${disk}\\${path} dan hech narsa topilmadi`, 'w');
+}
+
+// Asosiy scan yordamchi funksiyasi
+async function _scanPath(plug, disk, path) {
+  const allCerts = [];
+  try {
+    log('auth', `  → ${plug}.list_certificates(['${disk}'])...`, 'i');
+    const r = await eimzo.call(plug, 'list_certificates', [disk]);
+    log('auth', `  Raw response (${plug}): ${JSON.stringify(r).slice(0, 300)}`, 'i');
+    const list = r.certificates || r.Certificates || r.keys || [];
+    if (list.length) {
+      list.forEach(c => allCerts.push({ ...c, _plug: plug, _disk: disk, _path: path }));
+      log('auth', `✓ ${plug}[${disk}]: ${list.length} ta sertifikat topildi!`, 's');
+    } else {
+      log('auth', `  ${plug}[${disk}]: bo'sh ro'yxat`, 'w');
+    }
+  } catch(e) {
+    log('auth', `  ${plug}.list_certificates xatolik: ${e.message}`, 'w');
+
+    // Fallback: DSKEYS papkasidagi fayllarni ko'rish (fileio.load_file)
+    try {
+      log('auth', `  → fileio.load_file ['${disk}\\${path}'] urinilmoqda...`, 'i');
+      const fr = await eimzo.call('fileio', 'load_file', [`${disk}\${path}`]);
+      log('auth', `  fileio response: ${JSON.stringify(fr).slice(0, 200)}`, 'i');
+    } catch(fe) {
+      log('auth', `  fileio xatolik: ${fe.message}`, 'w');
+    }
+  }
+
+  if (allCerts.length) {
+    // Mavjud ro'yxatga qo'shish
+    window._certs = window._certs || [];
+    const offset = window._certs.length;
+    allCerts.forEach((c, i) => { window._certs[offset + i] = c; });
+
+    // Dropdown yangilash
+    const sel = document.getElementById('cert-select');
+    if (sel.options[0] && (sel.options[0].value === '' && sel.options[0].textContent.includes('Skanerlang'))) {
+      sel.innerHTML = '<option value="">— Tanlang —</option>';
+    }
+    allCerts.forEach((c, i) => {
+      const cn  = c.CN || c.commonName || c.subjectName || c.name || c.serialNumber || `Kalit #${offset+i+1}`;
+      const sn  = c.serialNumber || c.SerialNumber || '';
+      const exp = c.validTo || c.notAfter || '';
+      const opt = document.createElement('option');
+      opt.value = String(offset + i);
+      opt.textContent = `${cn}${sn ? ' · SN:'+sn.slice(-8) : ''}${exp ? ' · '+exp : ''} [${plug}]`;
+      sel.appendChild(opt);
+    });
+
+    log('auth', `✓ Dropdown yangilandi: ${allCerts.length} ta kalit`, 's');
+    markStep('s1', 'done');
+    return allCerts;
+  }
+  return [];
+}
+
+// Raw debug — E-IMZO dan to'g'ri javob ko'rish
+async function showRawDebug() {
+  const ok = await eimzo.connect();
+  if (!ok) return;
+  log('auth', '=== DEBUG: Raw E-IMZO calllar ===', 'w');
+
+  // app.get_jvm_version — eng oddiy call
+  try {
+    const r = await eimzo.call('app', 'get_jvm_version', []);
+    log('auth', `app.get_jvm_version: ${JSON.stringify(r)}`, 's');
+  } catch(e) { log('auth', `app.get_jvm_version xatolik: ${e.message}`, 'e'); }
+
+  // certkey.list_disks
+  try {
+    const r = await eimzo.call('certkey', 'list_disks', []);
+    log('auth', `certkey.list_disks: ${JSON.stringify(r)}`, 's');
+  } catch(e) { log('auth', `certkey.list_disks xatolik: ${e.message}`, 'e'); }
+
+  // pfx.list_disks
+  try {
+    const r = await eimzo.call('pfx', 'list_disks', []);
+    log('auth', `pfx.list_disks: ${JSON.stringify(r)}`, 's');
+  } catch(e) { log('auth', `pfx.list_disks xatolik: ${e.message}`, 'e'); }
+}
 
 // Sertifikat dropdown
 function renderKeys(certs) {
